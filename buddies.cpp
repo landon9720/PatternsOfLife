@@ -3,6 +3,7 @@
 #include <random>
 #include <cassert>
 #include <set>
+#include <fann.h>
 #include "easygame.h"
 
 using std::min;
@@ -18,6 +19,18 @@ const float HEALTH_DECAY = 10.0f;
 const float MAX_HEALTH = 100.0f;
 const float PLAYER_MOVE_SPEED = 100.0f;
 
+const int ANN_NUM_LAYERS = 3;
+const int ANN_NUM_INPUT = 2;
+const int ANN_NUM_HIDDEN = 2;
+const int ANN_NUM_OUTPUT = 2;
+
+
+struct Food {
+  float x, y;
+};
+
+Food make_food();
+
 struct AgentInput {
   float nearest_food_dx;
   float nearest_food_dy;
@@ -30,13 +43,51 @@ struct AgentBehavior {
 struct Agent {
   float x, y;
   float health;
+  fann *ann;
 };
 
-struct Food {
-  float x, y;
-};
+void calculate_ann_input(AgentInput input, fann_type ann_input[2]) {
+  float mag = sqrtf(input.nearest_food_dx * input.nearest_food_dx +
+                    input.nearest_food_dy * input.nearest_food_dy);
+  ann_input[0] = input.nearest_food_dx / mag;
+  ann_input[1] = input.nearest_food_dy / mag;
+}
 
-Food make_food();
+void train_agent(Agent *agent, AgentInput input, AgentBehavior behavior) {
+  fann_type ann_input[2];
+  calculate_ann_input(input, ann_input);
+
+  fann_type ann_output[2] = {
+    behavior.dx / PLAYER_MOVE_SPEED,
+    behavior.dy / PLAYER_MOVE_SPEED
+  };
+
+  fann_train(agent->ann, ann_input, ann_output);
+}
+
+AgentBehavior run_agent(Agent *agent, AgentInput input) {
+  fann_type ann_input[2];
+  calculate_ann_input(input, ann_input);
+
+  fann_type *ann_output = fann_run(agent->ann, ann_input);
+  AgentBehavior b = {
+    PLAYER_MOVE_SPEED * ann_output[0],
+    PLAYER_MOVE_SPEED * ann_output[1]
+  };
+  return b;
+}
+
+void print_ann(fann *ann) {
+  int num_conn = fann_get_total_connections(ann);
+  fann_connection connections[num_conn];
+  fann_get_connection_array(ann, connections);
+  for(int i = 0; i < num_conn; i++) {
+    printf("%d -> %d: %f\n",
+           connections[i].from_neuron,
+           connections[i].to_neuron,
+           connections[i].weight);
+  }
+}
 
 int main(int argc, char *argv[]) {
   eg_init(640, 480, "Buddies");
@@ -47,10 +98,24 @@ int main(int argc, char *argv[]) {
   agents[0].x = 160.0f;
   agents[0].y = 240.0f;
   agents[0].health = MAX_HEALTH;
+  agents[0].ann = nullptr;
 
   agents[1].x = 480.0f;
   agents[1].y = 240.0f;
   agents[1].health = MAX_HEALTH;
+  agents[1].ann = fann_create_standard(ANN_NUM_LAYERS,
+                                       ANN_NUM_INPUT,
+                                       ANN_NUM_HIDDEN,
+                                       ANN_NUM_OUTPUT);
+  fann_set_activation_function_hidden(agents[1].ann, FANN_SIGMOID_SYMMETRIC);
+  fann_set_activation_function_output(agents[1].ann, FANN_SIGMOID_SYMMETRIC);
+  //fann_set_activation_function_hidden(agents[1].ann, FANN_LINEAR_PIECE_SYMMETRIC);
+  //fann_set_activation_function_output(agents[1].ann, FANN_LINEAR_PIECE_SYMMETRIC);
+  //fann_set_activation_function_hidden(agents[1].ann, FANN_GAUSSIAN_SYMMETRIC);
+  //fann_set_activation_function_output(agents[1].ann, FANN_GAUSSIAN_SYMMETRIC);
+  //fann_set_activation_function_hidden(agents[1].ann, FANN_LINEAR);
+  //fann_set_activation_function_output(agents[1].ann, FANN_LINEAR);
+  fann_randomize_weights(agents[1].ann, 0.0f, 1.0f);
 
   for(int i = 0; i < FOOD_COUNT; i++) {
     foods[i] = make_food();
@@ -88,9 +153,19 @@ int main(int argc, char *argv[]) {
     if(eg_get_keystate(SDL_SCANCODE_DOWN))  agent_behaviors[0].dy -= PLAYER_MOVE_SPEED;
     if(eg_get_keystate(SDL_SCANCODE_UP))    agent_behaviors[0].dy += PLAYER_MOVE_SPEED;
 
+    if(agent_behaviors[0].dx != 0.0f && agent_behaviors[0].dy != 0.0f) {
+      train_agent(&agents[1], agent_inputs[0], agent_behaviors[0]);
+    }
+
+    //fann_print_parameters(agents[1].ann);
+    //fann_print_connections(agents[1].ann);
+    //print_ann(agents[1].ann);
+    agent_behaviors[1] = run_agent(&agents[1], agent_inputs[1]);
+    //printf("dx = %f; dy = %f\n", agent_behaviors[1].dx, agent_behaviors[1].dy);
+
     for(int i = 0; i < 2; i++) {
-      agents[i].x += DT * agent_behaviors[i].dx;
-      agents[i].y += DT * agent_behaviors[i].dy;
+      agents[i].x = clamp(agents[i].x + DT * agent_behaviors[i].dx, 0.0f, 640.0f);
+      agents[i].y = clamp(agents[i].y + DT * agent_behaviors[i].dy, 0.0f, 480.0f);
       agents[i].health = max(0.0f, agents[i].health - DT * HEALTH_DECAY);
 
       for(int j = 0; j < FOOD_COUNT; j++) {

@@ -35,5 +35,11 @@ void eg_draw_image(EGImage *img, float x, float y, float w, float h);
 // audio
 // TODO
 
+// util
+template<typename T>
+T clamp(const T &x, const T &a, const T &b) {
+  return std::max(std::min(x, b), a);
+}
+
 #endif
 
