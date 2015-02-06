@@ -30,7 +30,7 @@ const int NUM_AGENTS = 10;
 const int ANN_NUM_LAYERS = 3;
 const int ANN_NUM_INPUT = 2;
 const int ANN_NUM_HIDDEN = 4;
-const int ANN_NUM_OUTPUT = 4;
+const int ANN_NUM_OUTPUT = 2  ;
 
 const int NUM_COLORS = 4;
 const float AGENT_COLORS[NUM_COLORS][4] = {
@@ -74,8 +74,6 @@ struct AgentInput {
 
 struct AgentBehavior {
   float dx, dy;
-  bool place_block;
-  bool pickup_block;
 };
 
 struct Agent {
@@ -118,9 +116,7 @@ void train_agent(Agent *agent, AgentInput input, AgentBehavior behavior) {
 
   fann_type ann_output[ANN_NUM_OUTPUT] = {
     behavior.dx / PLAYER_MOVE_SPEED,
-    behavior.dy / PLAYER_MOVE_SPEED,
-    behavior.place_block ? 1.0f : 0.0f,
-    behavior.pickup_block ? 1.0f : 0.0f
+    behavior.dy / PLAYER_MOVE_SPEED
   };
 
   fann_train(agent->ann, ann_input, ann_output);
@@ -134,9 +130,7 @@ AgentBehavior run_agent(Agent *agent, AgentInput input) {
 
   AgentBehavior b = {
     PLAYER_MOVE_SPEED * ann_output[0],
-    PLAYER_MOVE_SPEED * ann_output[1],
-    ann_output[2] > 0.5f, // place block
-    ann_output[3] > 0.5f  // pickup block
+    PLAYER_MOVE_SPEED * ann_output[1]
   };
   return b;
 }
@@ -205,15 +199,13 @@ int main(int argc, char *argv[]) {
     AgentBehavior agent_behaviors[NUM_AGENTS];
 
     // player's agent behavior
-    agent_behaviors[0].dx = 0.0f;
-    agent_behaviors[0].dy = 0.0f;
-    if(eg_get_keystate(SDL_SCANCODE_LEFT))  agent_behaviors[0].dx -= PLAYER_MOVE_SPEED;
-    if(eg_get_keystate(SDL_SCANCODE_RIGHT)) agent_behaviors[0].dx += PLAYER_MOVE_SPEED;
-    if(eg_get_keystate(SDL_SCANCODE_DOWN))  agent_behaviors[0].dy -= PLAYER_MOVE_SPEED;
-    if(eg_get_keystate(SDL_SCANCODE_UP))    agent_behaviors[0].dy += PLAYER_MOVE_SPEED;
-    agent_behaviors[0].place_block = eg_get_keystate(SDL_SCANCODE_SPACE);
-    agent_behaviors[0].pickup_block = false;
-
+    float nearest_food_mag = sqrtf(
+      agent_inputs[0].nearest_food_dx * agent_inputs[0].nearest_food_dx +
+      agent_inputs[0].nearest_food_dy * agent_inputs[0].nearest_food_dy
+    );
+    agent_behaviors[0].dx = (agent_inputs[0].nearest_food_dx / nearest_food_mag) * PLAYER_MOVE_SPEED ;
+    agent_behaviors[0].dy = (agent_inputs[0].nearest_food_dy / nearest_food_mag) * PLAYER_MOVE_SPEED;
+    
     // other agents' behaviors and training
     for(int i = 1; i < NUM_AGENTS; i++) {
       // if the player's agent is moving, we'll train everyone to mimic the player
@@ -239,12 +231,6 @@ int main(int argc, char *argv[]) {
          }
       }
 
-      if(agent_behaviors[i].place_block) {
-        if(grid.cell_at(agents[i].x, agents[i].y) == GridCellEmpty) {
-          grid.cell_at(agents[i].x, agents[i].y) = GridCellFull;
-        }
-      }
-
       if(agents[i].health <= 0.0f) {
         if(agents[i].ann) fann_destroy(agents[i].ann);
         agents[i] = make_agent();
@@ -263,25 +249,17 @@ int main(int argc, char *argv[]) {
       float fy = y / (float)GRID_WIDTH * WIDTH;
       eg_draw_line(0.0f, fy, WIDTH, fy);
     }
-    for(int y = 0; y < GRID_HEIGHT; y++) {
-      for(int x = 0; x < GRID_WIDTH; x++) {
-        if(grid.cell(x, y) == GridCellFull) {
-          float fx = x / (float)GRID_WIDTH * WIDTH;
-          float fy = y / (float)GRID_WIDTH * WIDTH;
-          float fw = WIDTH / (float)GRID_WIDTH;
-          float fh = HEIGHT / (float)GRID_HEIGHT;
-          eg_draw_square(fx, fy, fw, fh);
-        }
-      }
-    }
+
 
     // draw agents
     for(int i = 0; i < NUM_AGENTS; i++) {
       eg_set_color(AGENT_COLORS[i % NUM_COLORS][0],
                    AGENT_COLORS[i % NUM_COLORS][1],
                    AGENT_COLORS[i % NUM_COLORS][2],
-                   AGENT_COLORS[i % NUM_COLORS][3]);    
-      eg_draw_square(agents[i].x - 0.5f*BUDDY_SIZE, agents[i].y - 0.5f*BUDDY_SIZE, BUDDY_SIZE, BUDDY_SIZE);
+                   AGENT_COLORS[i % NUM_COLORS][3]);
+
+      float size = i == 0 ? BUDDY_SIZE * 2 : BUDDY_SIZE;
+      eg_draw_square(agents[i].x - 0.5f*size, agents[i].y - 0.5f*size, size, size);
 
       eg_set_color(0.0f, 0.0f, 0.0f, 1.0f);
       eg_draw_square(agents[i].x - 15.0f, agents[i].y + 12.0f, 30.0f, 5.0f);
