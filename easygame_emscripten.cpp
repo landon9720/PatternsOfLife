@@ -1,15 +1,8 @@
 #include <cassert>
 #include <memory>
 #include <SDL/SDL.h>
-#ifdef __EMSCRIPTEN__
 #include <gl/gl.h>
-#else
-#include <OpenGL/gl.h>
-#endif
 #include "easygame.h"
-
-using std::unique_ptr;
-using std::make_unique;
 
 #define CHECK_INIT assert(initialized == true)
 
@@ -19,15 +12,7 @@ static const unsigned char *keystate = nullptr;
 
 void eg_init(int width, int height, const std::string &title) {
   SDL_Init(SDL_INIT_VIDEO);
-  window = SDL_CreateWindow(
-      title.c_str(),
-      SDL_WINDOWPOS_UNDEFINED,
-      SDL_WINDOWPOS_UNDEFINED,
-      width, height,
-      SDL_WINDOW_OPENGL|SDL_WINDOW_ALLOW_HIGHDPI);
-
-  SDL_SetWindowFullscreen(window, 0);
-  SDL_GL_CreateContext(window);
+  SDL_SetVideoMode(width, height, 32, SDL_OPENGL|SDL_DOUBLEBUF);
 
   keystate = SDL_GetKeyboardState(nullptr);
 

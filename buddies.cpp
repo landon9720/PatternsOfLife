@@ -5,6 +5,10 @@
 #include <set>
 #include <fann.h>
 #include "easygame.h"
+#ifdef __EMSCRIPTEN__
+#include <emscripten.h>
+#endif
+
 
 using std::min;
 using std::max;
@@ -65,7 +69,13 @@ struct Food {
   float x, y;
 };
 
-Food make_food();
+Food make_food() {
+  std::random_device rd;
+  std::mt19937 gen(rd());
+  std::uniform_real_distribution<float> fdis(0, 1);
+  Food f = { WIDTH * fdis(gen), HEIGHT * fdis(gen) };
+  return f;
+}
 
 struct AgentInput {
   float nearest_food_dx;
@@ -147,15 +157,13 @@ void print_ann(fann *ann) {
   }
 }
 
-int main(int argc, char *argv[]) {
-  assert(NUM_AGENTS >= 1);
+static Grid grid;
+static Agent agents[NUM_AGENTS];
+static Food foods[FOOD_COUNT];
+static bool quit = false;
 
+void init() {
   eg_init(WIDTH, HEIGHT, "Buddies");
-
-  Grid grid;
-  Agent agents[NUM_AGENTS];
-  Food foods[FOOD_COUNT];
-
   for(int y = 0; y < GRID_HEIGHT; y++) {
     for(int x = 0; x < GRID_WIDTH; x++) {
       grid.cell(x, y) = GridCellEmpty;
@@ -169,128 +177,135 @@ int main(int argc, char *argv[]) {
   for(int i = 0; i < FOOD_COUNT; i++) {
     foods[i] = make_food();
   }
+}
 
-  bool quit = false;
-  while(!quit) {
-    EGEvent event;
-    while(eg_poll_event(&event)) {
-      if(event.type == SDL_QUIT) {
-        quit = true;
-      }
+void step() {
+  EGEvent event;
+
+  while(eg_poll_event(&event)) {
+    if(event.type == SDL_QUIT) {
+      quit = true;
     }
-
-    AgentInput agent_inputs[NUM_AGENTS];
-    for(int i = 0; i < NUM_AGENTS; i++) {
-      int nearest_index;
-      float nearest_dist_sq;
-      for(int j = 0; j < FOOD_COUNT; j++) {
-        float dx = foods[j].x - agents[i].x;
-        float dy = foods[j].y - agents[i].y;
-        float dist_sq = (dx*dx) + (dy*dy);
-        if(j == 0 || dist_sq < nearest_dist_sq) {
-          nearest_index = j;
-          nearest_dist_sq = dist_sq;
-        }
-      }
-      agent_inputs[i].nearest_food_dx = foods[nearest_index].x - agents[i].x;
-      agent_inputs[i].nearest_food_dy = foods[nearest_index].y - agents[i].y;
-    }
-
-    AgentBehavior agent_behaviors[NUM_AGENTS];
-
-    // player's agent behavior
-    float nearest_food_mag = sqrtf(
-      agent_inputs[0].nearest_food_dx * agent_inputs[0].nearest_food_dx +
-      agent_inputs[0].nearest_food_dy * agent_inputs[0].nearest_food_dy
-    );
-    agent_behaviors[0].dx = (agent_inputs[0].nearest_food_dx / nearest_food_mag) * PLAYER_MOVE_SPEED ;
-    agent_behaviors[0].dy = (agent_inputs[0].nearest_food_dy / nearest_food_mag) * PLAYER_MOVE_SPEED;
-    
-    // other agents' behaviors and training
-    for(int i = 1; i < NUM_AGENTS; i++) {
-      // if the player's agent is moving, we'll train everyone to mimic the player
-      if(!(agent_behaviors[0].dx == 0.0f && agent_behaviors[0].dy == 0.0f)) {
-        train_agent(&agents[i], agent_inputs[0], agent_behaviors[0]);
-      }
-      agent_behaviors[i] = run_agent(&agents[i], agent_inputs[i]);
-    }
-
-    for(int i = 0; i < NUM_AGENTS; i++) {
-      agents[i].x = clamp(agents[i].x + DT * agent_behaviors[i].dx, 0.0f, (float)WIDTH);
-      agents[i].y = clamp(agents[i].y + DT * agent_behaviors[i].dy, 0.0f, (float)HEIGHT);
-      agents[i].health = max(0.0f, agents[i].health - DT * HEALTH_DECAY);
-
-      for(int j = 0; j < FOOD_COUNT; j++) {
-         float dx = foods[j].x - agents[i].x;
-         float dy = foods[j].y - agents[i].y;
-         float dist_sq = (dx*dx) + (dy*dy);
-         if(dist_sq < EAT_DISTANCE*EAT_DISTANCE) {
-           agents[i].health = min(MAX_HEALTH, agents[i].health + FOOD_VALUE);
-           foods[j] = make_food();
-           break;
-         }
-      }
-
-      if(agents[i].health <= 0.0f) {
-        if(agents[i].ann) fann_destroy(agents[i].ann);
-        agents[i] = make_agent();
-      }
-    }
-
-    eg_clear_screen(0.7f, 0.8f, 0.75f, 0.0f);
-
-    // draw grid
-    eg_set_color(0.6f, 0.7f, 0.65f, 1.0f);
-    for(int x = 0; x < GRID_WIDTH; x++) {
-      float fx = x / (float)GRID_WIDTH * WIDTH;
-      eg_draw_line(fx, 0.0f, fx, HEIGHT);
-    }
-    for(int y = 0; y < GRID_HEIGHT; y++) {
-      float fy = y / (float)GRID_WIDTH * WIDTH;
-      eg_draw_line(0.0f, fy, WIDTH, fy);
-    }
-
-
-    // draw agents
-    for(int i = 0; i < NUM_AGENTS; i++) {
-      eg_set_color(AGENT_COLORS[i % NUM_COLORS][0],
-                   AGENT_COLORS[i % NUM_COLORS][1],
-                   AGENT_COLORS[i % NUM_COLORS][2],
-                   AGENT_COLORS[i % NUM_COLORS][3]);
-
-      float size = i == 0 ? BUDDY_SIZE * 2 : BUDDY_SIZE;
-      eg_draw_square(agents[i].x - 0.5f*size, agents[i].y - 0.5f*size, size, size);
-
-      eg_set_color(0.0f, 0.0f, 0.0f, 1.0f);
-      eg_draw_square(agents[i].x - 15.0f, agents[i].y + 12.0f, 30.0f, 5.0f);
-      eg_set_color(1.0f, 1.0f, 0.5f, 1.0f);
-      eg_draw_square(agents[i].x - 15.0f, agents[i].y + 12.0f, agents[i].health * 30.0f / MAX_HEALTH, 5.0f);
-
-      eg_set_color(0.0f, 0.0f, 0.0f, 1.0f);
-      eg_draw_line(agents[i].x,
-                   agents[i].y,
-                   agents[i].x + agent_inputs[i].nearest_food_dx,
-                   agents[i].y + agent_inputs[i].nearest_food_dy);
-    }
-
-    // draw foods
-    eg_set_color(0.8f, 0.5f, 0.1f, 1.0f);
-    for(int i = 0; i < FOOD_COUNT; i++) {
-      eg_draw_square(foods[i].x - 0.5f*FOOD_SIZE, foods[i].y - 0.5f*FOOD_SIZE, FOOD_SIZE, FOOD_SIZE);
-    }
-
-    eg_swap_buffers();
   }
+
+  AgentInput agent_inputs[NUM_AGENTS];
+  for(int i = 0; i < NUM_AGENTS; i++) {
+    int nearest_index;
+    float nearest_dist_sq;
+    for(int j = 0; j < FOOD_COUNT; j++) {
+      float dx = foods[j].x - agents[i].x;
+      float dy = foods[j].y - agents[i].y;
+      float dist_sq = (dx*dx) + (dy*dy);
+      if(j == 0 || dist_sq < nearest_dist_sq) {
+        nearest_index = j;
+        nearest_dist_sq = dist_sq;
+      }
+    }
+    agent_inputs[i].nearest_food_dx = foods[nearest_index].x - agents[i].x;
+    agent_inputs[i].nearest_food_dy = foods[nearest_index].y - agents[i].y;
+  }
+
+  AgentBehavior agent_behaviors[NUM_AGENTS];
+
+  // player's agent behavior
+  float nearest_food_mag = sqrtf(
+    agent_inputs[0].nearest_food_dx * agent_inputs[0].nearest_food_dx +
+    agent_inputs[0].nearest_food_dy * agent_inputs[0].nearest_food_dy
+  );
+  agent_behaviors[0].dx = (agent_inputs[0].nearest_food_dx / nearest_food_mag) * PLAYER_MOVE_SPEED ;
+  agent_behaviors[0].dy = (agent_inputs[0].nearest_food_dy / nearest_food_mag) * PLAYER_MOVE_SPEED;
+  
+  // other agents' behaviors and training
+  for(int i = 1; i < NUM_AGENTS; i++) {
+    // if the player's agent is moving, we'll train everyone to mimic the player
+    if(!(agent_behaviors[0].dx == 0.0f && agent_behaviors[0].dy == 0.0f)) {
+      train_agent(&agents[i], agent_inputs[0], agent_behaviors[0]);
+    }
+    agent_behaviors[i] = run_agent(&agents[i], agent_inputs[i]);
+  }
+
+  for(int i = 0; i < NUM_AGENTS; i++) {
+    agents[i].x = clamp(agents[i].x + DT * agent_behaviors[i].dx, 0.0f, (float)WIDTH);
+    agents[i].y = clamp(agents[i].y + DT * agent_behaviors[i].dy, 0.0f, (float)HEIGHT);
+    agents[i].health = max(0.0f, agents[i].health - DT * HEALTH_DECAY);
+
+    for(int j = 0; j < FOOD_COUNT; j++) {
+       float dx = foods[j].x - agents[i].x;
+       float dy = foods[j].y - agents[i].y;
+       float dist_sq = (dx*dx) + (dy*dy);
+       if(dist_sq < EAT_DISTANCE*EAT_DISTANCE) {
+         agents[i].health = min(MAX_HEALTH, agents[i].health + FOOD_VALUE);
+         foods[j] = make_food();
+         break;
+       }
+    }
+
+    if(agents[i].health <= 0.0f) {
+      if(agents[i].ann) fann_destroy(agents[i].ann);
+      agents[i] = make_agent();
+    }
+  }
+
+  eg_clear_screen(0.7f, 0.8f, 0.75f, 0.0f);
+
+  // draw grid
+  eg_set_color(0.6f, 0.7f, 0.65f, 1.0f);
+  for(int x = 0; x < GRID_WIDTH; x++) {
+    float fx = x / (float)GRID_WIDTH * WIDTH;
+    eg_draw_line(fx, 0.0f, fx, HEIGHT);
+  }
+  for(int y = 0; y < GRID_HEIGHT; y++) {
+    float fy = y / (float)GRID_WIDTH * WIDTH;
+    eg_draw_line(0.0f, fy, WIDTH, fy);
+  }
+
+
+  // draw agents
+  for(int i = 0; i < NUM_AGENTS; i++) {
+    eg_set_color(AGENT_COLORS[i % NUM_COLORS][0],
+                 AGENT_COLORS[i % NUM_COLORS][1],
+                 AGENT_COLORS[i % NUM_COLORS][2],
+                 AGENT_COLORS[i % NUM_COLORS][3]);
+
+    float size = i == 0 ? BUDDY_SIZE * 2 : BUDDY_SIZE;
+    eg_draw_square(agents[i].x - 0.5f*size, agents[i].y - 0.5f*size, size, size);
+
+    eg_set_color(0.0f, 0.0f, 0.0f, 1.0f);
+    eg_draw_square(agents[i].x - 15.0f, agents[i].y + 12.0f, 30.0f, 5.0f);
+    eg_set_color(1.0f, 1.0f, 0.5f, 1.0f);
+    eg_draw_square(agents[i].x - 15.0f, agents[i].y + 12.0f, agents[i].health * 30.0f / MAX_HEALTH, 5.0f);
+
+    eg_set_color(0.0f, 0.0f, 0.0f, 1.0f);
+    eg_draw_line(agents[i].x,
+                 agents[i].y,
+                 agents[i].x + agent_inputs[i].nearest_food_dx,
+                 agents[i].y + agent_inputs[i].nearest_food_dy);
+  }
+
+  // draw foods
+  eg_set_color(0.8f, 0.5f, 0.1f, 1.0f);
+  for(int i = 0; i < FOOD_COUNT; i++) {
+    eg_draw_square(foods[i].x - 0.5f*FOOD_SIZE, foods[i].y - 0.5f*FOOD_SIZE, FOOD_SIZE, FOOD_SIZE);
+  }
+
+  eg_swap_buffers();
+}
+
+int main(int argc, char *argv[]) {
+  assert(NUM_AGENTS >= 1);
+
+  init();
+
+#ifdef __EMSCRIPTEN__
+  emscripten_set_main_loop(step, 60, 1);
+#else
+  while(!quit) {
+    step();
+  }
+#endif
 
   eg_shutdown();
 
   return 0;
 }
 
-Food make_food() {
-  std::random_device rd;
-  std::mt19937 gen(rd());
-  std::uniform_real_distribution<float> fdis(0, 1);
-  Food f = { WIDTH * fdis(gen), HEIGHT * fdis(gen) };
-  return f;
-}
