@@ -2,7 +2,7 @@
 #define __EASYGAME_H_
 
 #include <string>
-#include <SDL/SDL.h>
+#include <SDL2/SDL.h>
 
 // initialization, shutdown, etc.
 void eg_init(int width, int height, const std::string &title);

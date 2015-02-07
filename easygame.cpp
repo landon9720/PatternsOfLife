@@ -1,11 +1,8 @@
 #include <cassert>
 #include <memory>
-#include <SDL/SDL.h>
-#ifdef __EMSCRIPTEN__
-#include <gl/gl.h>
-#else
+#include <SDL2/SDL.h>
+#include <SDL2/SDL_image.h>
 #include <OpenGL/gl.h>
-#endif
 #include "easygame.h"
 
 using std::unique_ptr;
@@ -101,7 +98,6 @@ void eg_draw_square(float x, float y, float w, float h) {
   glEnd();
 }
 
-/*
 struct EGImage {
   GLuint tex;
 };
@@ -140,4 +136,3 @@ void eg_draw_image(EGImage *img, float x, float y, float w, float h) {
   glDisable(GL_TEXTURE);
   glBindTexture(GL_TEXTURE_2D, 0);
 }
-*/

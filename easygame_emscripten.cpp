@@ -2,7 +2,7 @@
 #include <memory>
 #include <SDL/SDL.h>
 #include <gl/gl.h>
-#include "easygame.h"
+#include "easygame_emscripten.h"
 
 #define CHECK_INIT assert(initialized == true)
 

@@ -4,9 +4,11 @@
 #include <cassert>
 #include <set>
 #include <fann.h>
-#include "easygame.h"
 #ifdef __EMSCRIPTEN__
+#include "easygame_emscripten.h"
 #include <emscripten.h>
+#else
+#include "easygame.h"
 #endif
 
 
