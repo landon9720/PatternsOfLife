@@ -23,7 +23,7 @@ const float FOOD_VALUE = 75.0f;
 const float EAT_DISTANCE = 20.0f;
 const float HEALTH_DECAY = 1.0f;
 const float HEALTH_DECAY_CONSTANT = 0.1f;
-const float MAX_HEALTH = 100.0f;
+const float MAX_HEALTH = 1000.0f;
 const float AGENT_MAX_FORCE = 100.0f;
 const float AGENT_MAX_ROTATIONAL_FORCE = M_PI / 40.0f;
 
@@ -32,12 +32,11 @@ const int NUM_AGENTS = 10;
 // in  1: radians to food
 // in  2: distance to food
 // in  3: health of self
-// in  4: orientation of self
 // out 1: move dx
 // out 2: move dy
 
 const int ANN_NUM_LAYERS = 3;
-const int ANN_NUM_INPUT = 4;
+const int ANN_NUM_INPUT = 3;
 const int ANN_NUM_HIDDEN = 6;
 const int ANN_NUM_OUTPUT = 2;
 
@@ -72,7 +71,6 @@ struct AgentInput {
   float nearest_food_relative_direction;
   float nearest_food_distance;
   float self_health;
-  float self_orientation;
 };
 
 struct AgentBehavior {
@@ -83,6 +81,7 @@ struct Agent {
   float x, y;
   float orientation;
   float health;
+  int score;
   fann *ann;
 };
 
@@ -90,7 +89,6 @@ void calculate_ann_input(AgentInput input, fann_type ann_input[ANN_NUM_INPUT]) {
   ann_input[0] = input.nearest_food_relative_direction;
   ann_input[1] = input.nearest_food_distance;
   ann_input[2] = input.self_health;
-  ann_input[3] = input.self_orientation;
 }
 
 Agent make_agent() {
@@ -104,6 +102,7 @@ Agent make_agent() {
   agent.orientation = 0.0f;
 //  agent.orientation = fdis(gen) * 2 * M_PI - M_PI;
   agent.health = MAX_HEALTH;
+  agent.score = 0;
   agent.ann = fann_create_standard(ANN_NUM_LAYERS,
                                        ANN_NUM_INPUT,
                                        ANN_NUM_HIDDEN,
@@ -111,8 +110,8 @@ Agent make_agent() {
 
   fann_set_activation_function_hidden(agent.ann, FANN_SIGMOID_SYMMETRIC);
   fann_set_activation_function_output(agent.ann, FANN_SIGMOID_SYMMETRIC);
-//  fann_randomize_weights(agent.ann, -1.0f, 1.0f);
-
+  fann_set_training_algorithm(agent.ann, FANN_TRAIN_INCREMENTAL);
+  fann_set_learning_rate(agent.ann, 0.01f);
   return agent;
 }
 
@@ -141,11 +140,11 @@ AgentBehavior run_agent(Agent *agent, AgentInput input) {
   return b;
 }
 
-void xx(Agent *agent, AgentInput *agent_input, AgentBehavior *agent_behavior) {
+void calculate_procedural_behavior(Agent *agent, AgentInput *agent_input, AgentBehavior *agent_behavior) {
   agent_behavior->rotational_force = 0.0f;
   agent_behavior->force = 0.0f;
   if (agent_input->nearest_food_distance < agent_input->self_health) {
-    agent_behavior->rotational_force = clamp(agent_input->nearest_food_relative_direction, -AGENT_MAX_ROTATIONAL_FORCE, AGENT_MAX_ROTATIONAL_FORCE); //agent_inputs[0].nearest_food - agents[0].orientation;//
+    agent_behavior->rotational_force = clamp(agent_input->nearest_food_relative_direction, -AGENT_MAX_ROTATIONAL_FORCE, AGENT_MAX_ROTATIONAL_FORCE);
     agent_behavior->force = clamp(agent_input->nearest_food_distance, -AGENT_MAX_FORCE, AGENT_MAX_FORCE);
   }
 }
@@ -181,6 +180,9 @@ int main(int argc, char *argv[]) {
     agents[i] = make_agent();
   }
 
+  // agent 1 gets a randomized brain and no training :(
+  fann_randomize_weights(agents[1].ann, -1.0f, 1.0f);
+
   for(int i = 0; i < FOOD_COUNT; i++) {
     foods[i] = make_food();
   }
@@ -212,18 +214,21 @@ int main(int argc, char *argv[]) {
       agent_inputs[i].nearest_food_relative_direction = atan2(dy, dx) - agents[i].orientation;
       agent_inputs[i].nearest_food_distance = sqrtf(dx * dx + dy * dy);
       agent_inputs[i].self_health = agents[i].health;
-      agent_inputs[i].self_orientation = agents[i].orientation;
     }
 
     AgentBehavior agent_behaviors[NUM_AGENTS];
 
     //
     //
-    xx(&agents[0], &agent_inputs[0], &agent_behaviors[0]);
+    calculate_procedural_behavior(&agents[0], &agent_inputs[0], &agent_behaviors[0]);
 
-    // other agents' behaviors and training
-    for(int i = 1; i < NUM_AGENTS; i++) {
+    // other agents' training
+    for(int i = 2; i < NUM_AGENTS; i++) {
       train_agent(&agents[i], agent_inputs[0], agent_behaviors[0]);
+    }
+
+    // invoke brain
+    for(int i = 1; i < NUM_AGENTS; i++) {
       agent_behaviors[i] = run_agent(&agents[i], agent_inputs[i]);
     }
 
@@ -242,6 +247,7 @@ int main(int argc, char *argv[]) {
          float dist_sq = (dx*dx) + (dy*dy);
          if(dist_sq < EAT_DISTANCE*EAT_DISTANCE) {
            agents[i].health = min(MAX_HEALTH, agents[i].health + FOOD_VALUE);
+           agents[i].score++;
            foods[j] = make_food();
            break;
          }
@@ -271,7 +277,7 @@ int main(int argc, char *argv[]) {
     for(int i = 0; i < NUM_AGENTS; i++) {
 
       // indicate orientation
-      eg_set_color(1.0f, 1.0f, 1.0f, 1.0f);
+      eg_set_color(0.9f, 0.9f, 0.9f, 1.0f);
       eg_draw_line(agents[i].x,
                    agents[i].y,
                    agents[i].x + (float)cos(agents[i].orientation) * 10.0F,
@@ -279,23 +285,24 @@ int main(int argc, char *argv[]) {
                    10);
 
       // agent
-      if (i == 0) {
-        // AGENT 0 is colored red
-        eg_set_color(1.0f, 0.3f, 0.3f, 1.0f);
-      } else {
-        eg_set_color(0.0f, 0.7f, 0.9f, 1.0f);
-      }
+      if      (i == 0) eg_set_color(1.0f, 0.3f, 0.3f, 1.0f);
+      else if (i == 1) eg_set_color(0.0f, 1.0f, 0.0f, 1.0f);
+      else             eg_set_color(0.9f, 0.9f, 0.9f, 1.0f);
       eg_draw_square(agents[i].x - 0.5f*BUDDY_SIZE, agents[i].y - 0.5f*BUDDY_SIZE, BUDDY_SIZE, BUDDY_SIZE);
 
       // health bar
-      eg_set_color(0.2f, 0.2f, 0.2f, 1.0f);
+      eg_set_color(0.2f, 0.2f, 0.2f, 0.7f);
       eg_draw_square(agents[i].x - 15.0f, agents[i].y + 12.0f, 30.0f, 5.0f);
-      eg_set_color(1.0f, 1.0f, 0.5f, 1.0f);
+      eg_set_color(0.8f, 0.3f, 0.3f, 0.7f);
       eg_draw_square(agents[i].x - 15.0f, agents[i].y + 12.0f, agents[i].health * 30.0f / MAX_HEALTH, 5.0f);
+
+      // score bar
+      eg_set_color(0.5f, 0.9f, 0.5f, 0.7f);
+      eg_draw_square(agents[i].x - 15.0f, agents[i].y + 20.0f, (float)agents[i].score * 0.25f, 5.0f);
     }
 
     // draw foods
-    eg_set_color(0.0f, 1.0f, 0.0f, 1.0f);
+    eg_set_color(0.0f, 0.8f, 0.0f, 1.0f);
     for(int i = 0; i < FOOD_COUNT; i++) {
       eg_draw_square(foods[i].x - 0.5f*FOOD_SIZE, foods[i].y - 0.5f*FOOD_SIZE, FOOD_SIZE, FOOD_SIZE);
     }
