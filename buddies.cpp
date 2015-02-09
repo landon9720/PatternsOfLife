@@ -15,6 +15,7 @@
 using std::min;
 using std::max;
 
+const int   TURBO_RATE = 240; // how many simulation steps per render
 const int   WIDTH = 1280;
 const int   HEIGHT = 720;
 const int   GRID_WIDTH = WIDTH / 20;
@@ -22,37 +23,31 @@ const int   GRID_HEIGHT = HEIGHT / 20;
 const float GRID_CELL_WIDTH = (float)WIDTH / (float)GRID_WIDTH;
 const float GRID_CELL_HEIGHT = (float)HEIGHT / (float)GRID_HEIGHT;
 const float DT = 1.0f/60.0f;
-const float BUDDY_SIZE = 15.0f;
-const float FOOD_SIZE = 8.0f;
+const float BUDDY_SIZE = 10.0f;
+const float FOOD_SIZE = 6.0f;
 const int   FOOD_COUNT = 400;
-const float FOOD_VALUE = 25.0f;
+const float FOOD_VALUE = 100.0f;
+const float FLOW_DX = -0.100f;
+const float FLOW_DY = +0.005f;
 const float EAT_DISTANCE = 20.0f;
-const float HEALTH_DECAY = 1.0f;
+const float HEALTH_DECAY = 0.2f;
 const float HEALTH_DECAY_CONSTANT = 0.01f;
 const float MAX_HEALTH = 100.0f;
-const float PLAYER_MOVE_SPEED = 100.0f;
+const float AGENT_MAX_FORCE = 100.0f;
+const float AGENT_MAX_ROTATIONAL_FORCE = M_PI / 40.0f;
+const float LEARNING_RATE = 0.010f;
 
 const int NUM_AGENTS = 10;
 
 // in  1: radians to food
 // in  2: distance to food
 // in  3: health of self
-// in  4: orientation of self
 // out 1: move dx
 // out 2: move dy
 
-const int ANN_NUM_LAYERS = 3;
 const int ANN_NUM_INPUT = 4;
-const int ANN_NUM_HIDDEN = 5;
+const int ANN_NUM_HIDDEN = 7;
 const int ANN_NUM_OUTPUT = 2;
-
-const int NUM_COLORS = 4;
-const float AGENT_COLORS[NUM_COLORS][4] = {
-  { 0.3f, 0.5f, 0.2f, 1.0f },
-  { 0.3f, 0.2f, 0.5f, 1.0f },
-  { 0.5f, 0.3f, 0.2f, 1.0f },
-  { 0.5f, 0.3f, 0.5f, 1.0f }
-};
 
 enum GridCell {
   GridCellEmpty,
@@ -77,21 +72,16 @@ struct Grid {
 
 struct Food {
   float x, y;
+  float dx, dy;
+  float value;
 };
 
-Food make_food() {
-  std::random_device rd;
-  std::mt19937 gen(rd());
-  std::uniform_real_distribution<float> fdis(0, 1);
-  Food f = { WIDTH * fdis(gen), HEIGHT * fdis(gen) };
-  return f;
-}
+Food make_food();
 
 struct AgentInput {
-  float nearest_food;
+  float nearest_food_relative_direction;
   float nearest_food_distance;
   float self_health;
-  float self_orientation;
 };
 
 struct AgentBehavior {
@@ -102,14 +92,14 @@ struct Agent {
   float x, y;
   float orientation;
   float health;
+  int score;
   fann *ann;
 };
 
 void calculate_ann_input(AgentInput input, fann_type ann_input[ANN_NUM_INPUT]) {
-  ann_input[0] = input.nearest_food;
+  ann_input[0] = input.nearest_food_relative_direction;
   ann_input[1] = input.nearest_food_distance;
   ann_input[2] = input.self_health;
-  ann_input[3] = input.self_orientation;
 }
 
 Agent make_agent() {
@@ -118,19 +108,22 @@ Agent make_agent() {
   std::uniform_real_distribution<float> fdis(0, 1);
 
   Agent agent;
-  agent.x = WIDTH * fdis(gen);
-  agent.y = HEIGHT * fdis(gen);
+  // 1. agents start in a fixed location
+  agent.x = WIDTH * 0.25f;
+  agent.y = HEIGHT * 0.25f;
+  // 2. -or- agents start in a random location
+//  agent.x = WIDTH * fdis(gen);
+//  agent.y = HEIGHT * fdis(gen);
+  agent.orientation = 0.0f;
   agent.orientation = fdis(gen) * 2 * M_PI - M_PI;
   agent.health = MAX_HEALTH;
-  agent.ann = fann_create_standard(ANN_NUM_LAYERS,
-                                       ANN_NUM_INPUT,
-                                       ANN_NUM_HIDDEN,
-                                       ANN_NUM_OUTPUT);
-
+  agent.score = 0;
+  agent.ann = fann_create_standard(4, ANN_NUM_INPUT, ANN_NUM_HIDDEN, ANN_NUM_HIDDEN, ANN_NUM_OUTPUT);
   fann_set_activation_function_hidden(agent.ann, FANN_SIGMOID_SYMMETRIC);
   fann_set_activation_function_output(agent.ann, FANN_SIGMOID_SYMMETRIC);
-//  fann_randomize_weights(agent.ann, -1.0f, 1.0f);
-
+  fann_set_training_algorithm(agent.ann, FANN_TRAIN_INCREMENTAL);
+  fann_set_learning_rate(agent.ann, LEARNING_RATE);
+  fann_randomize_weights(agent.ann, -1.0f, 1.0f);
   return agent;
 }
 
@@ -139,8 +132,8 @@ void train_agent(Agent *agent, AgentInput input, AgentBehavior behavior) {
   calculate_ann_input(input, ann_input);
 
   fann_type ann_output[ANN_NUM_OUTPUT] = {
-    behavior.rotational_force,
-    behavior.force / PLAYER_MOVE_SPEED
+    behavior.rotational_force / AGENT_MAX_ROTATIONAL_FORCE,
+    behavior.force / AGENT_MAX_FORCE
   };
 
   fann_train(agent->ann, ann_input, ann_output);
@@ -153,8 +146,8 @@ AgentBehavior run_agent(Agent *agent, AgentInput input) {
   fann_type *ann_output = fann_run(agent->ann, ann_input);
 
   AgentBehavior b = {
-    ann_output[0],
-    PLAYER_MOVE_SPEED * ann_output[1]
+    AGENT_MAX_ROTATIONAL_FORCE * ann_output[0],
+    AGENT_MAX_FORCE * ann_output[1]
   };
   return b;
 }
@@ -171,6 +164,7 @@ void print_ann(fann *ann) {
   }
 }
 
+static int frame = 0;
 static Grid grid;
 static Agent agents[NUM_AGENTS];
 static Food foods[FOOD_COUNT];
@@ -196,13 +190,22 @@ void init() {
 
 void step() {
   EGEvent event;
-
   while(eg_poll_event(&event)) {
     if(event.type == SDL_QUIT) {
       quit = true;
     }
   }
 
+  // food model
+  for(int i = 0; i < FOOD_COUNT; i++) {
+    foods[i].x += foods[i].dx;
+    foods[i].y += foods[i].dy;
+    if (foods[i].x < 0.0f || foods[i].x > WIDTH || foods[i].y < 0.0f || foods[i].y > HEIGHT) {
+      foods[i] = make_food();
+    }
+  }
+
+  // agent model
   AgentInput agent_inputs[NUM_AGENTS];
   for(int i = 0; i < NUM_AGENTS; i++) {
     int nearest_index;
@@ -218,35 +221,39 @@ void step() {
     }
     float dx = foods[nearest_index].x - agents[i].x;
     float dy = foods[nearest_index].y - agents[i].y;
-    agent_inputs[i].nearest_food = atan2(dy, dx);
+    agent_inputs[i].nearest_food_relative_direction = atan2(dy, dx) - agents[i].orientation;
     agent_inputs[i].nearest_food_distance = sqrtf(dx * dx + dy * dy);
     agent_inputs[i].self_health = agents[i].health;
-    agent_inputs[i].self_orientation = agents[i].orientation;
+  }
+
+  // index of high scoring agent
+  int high_score_index = 0;
+  for(int i = 1; i < NUM_AGENTS; i++) {
+    if(agents[i].score > agents[high_score_index].score) {
+      high_score_index = i;
+    }
   }
 
   AgentBehavior agent_behaviors[NUM_AGENTS];
 
-  // only move agent0 if nearest food is within range
-  agent_behaviors[0].rotational_force = 0.0f;
-  agent_behaviors[0].force = 0.0f;
-  if (agent_inputs[0].nearest_food_distance < agents[0].health) {
-    agent_behaviors[0].rotational_force = agent_inputs[0].nearest_food - agents[0].orientation;
-    agent_behaviors[0].force = 10.0f;//agent_inputs[0].nearest_food_distance;
-  }
-
-  // other agents' behaviors and training
-  for(int i = 1; i < NUM_AGENTS; i++) {
-    train_agent(&agents[i], agent_inputs[0], agent_behaviors[0]);
-    agent_behaviors[i] = run_agent(&agents[i], agent_inputs[i]);
-  }
-
   for(int i = 0; i < NUM_AGENTS; i++) {
+
+    //
+    //
+    if (i != high_score_index) { // don't train the leader
+      train_agent(&agents[i], agent_inputs[high_score_index], agent_behaviors[high_score_index]);
+    }
+
+    //
+    //
+    agent_behaviors[i] = run_agent(&agents[i], agent_inputs[i]);
+
     agents[i].orientation = agents[i].orientation + agent_behaviors[i].rotational_force;
-    agents[i].x = clamp(agents[i].x + DT * agent_behaviors[i].force * (float)cos(agents[i].orientation), 0.0f, (float)WIDTH);
-    agents[i].y = clamp(agents[i].y + DT * agent_behaviors[i].force * (float)sin(agents[i].orientation), 0.0f, (float)HEIGHT);
-    
+    agents[i].x = agents[i].x + DT * agent_behaviors[i].force * (float)cos(agents[i].orientation);
+    agents[i].y = agents[i].y + DT * agent_behaviors[i].force * (float)sin(agents[i].orientation);
+
     // decay health as a function of force and time
-    float new_health = agents[i].health - DT * HEALTH_DECAY * abs(agent_behaviors[i].force) - HEALTH_DECAY_CONSTANT;
+    float new_health = agents[i].health - ((DT * HEALTH_DECAY * abs(agent_behaviors[i].force)) + HEALTH_DECAY_CONSTANT);
     agents[i].health = max(0.0f, new_health);
 
     for(int j = 0; j < FOOD_COUNT; j++) {
@@ -254,66 +261,92 @@ void step() {
        float dy = foods[j].y - agents[i].y;
        float dist_sq = (dx*dx) + (dy*dy);
        if(dist_sq < EAT_DISTANCE*EAT_DISTANCE) {
-         agents[i].health = min(MAX_HEALTH, agents[i].health + FOOD_VALUE);
+         agents[i].health = min(MAX_HEALTH, agents[i].health + FOOD_VALUE * foods[j].value);
+         agents[i].score++;
          foods[j] = make_food();
          break;
        }
     }
 
+    // death
     if(agents[i].health <= 0.0f) {
       if(agents[i].ann) fann_destroy(agents[i].ann);
       agents[i] = make_agent();
     }
   }
 
-  eg_clear_screen(0.7f, 0.8f, 0.75f, 0.0f);
+  bool skip_render = eg_get_keystate(SDL_SCANCODE_F) && (frame % TURBO_RATE != 0);
+  if(!skip_render) {
+    eg_clear_screen(0.0f, 0.0f, 0.0f, 0.0f);
 
-  // draw grid
-  eg_set_color(0.6f, 0.7f, 0.65f, 1.0f);
-  for(int x = 0; x < GRID_WIDTH; x++) {
-    float fx = x / (float)GRID_WIDTH * WIDTH;
-    eg_draw_line(fx, 0.0f, fx, HEIGHT);
-  }
-  for(int y = 0; y < GRID_HEIGHT; y++) {
-    float fy = y / (float)GRID_WIDTH * WIDTH;
-    eg_draw_line(0.0f, fy, WIDTH, fy);
-  }
-
-  // draw agents
-  for(int i = 0; i < NUM_AGENTS; i++) {
-
-    // agent color
-    if (i == 0) {
-      // agent0 is colored red
-      eg_set_color(1.0f, 0.3f, 0.3f, 1.0f);
-    } else {
-      eg_set_color(AGENT_COLORS[i % NUM_COLORS][0], AGENT_COLORS[i % NUM_COLORS][1], AGENT_COLORS[i % NUM_COLORS][2], AGENT_COLORS[i % NUM_COLORS][3]);
+    // draw grid
+    eg_set_color(0.5f, 0.5f, 0.5f, 0.5f);
+    for(int x = 0; x < GRID_WIDTH; x++) {
+      float fx = x / (float)GRID_WIDTH * WIDTH;
+      eg_draw_line(fx, 0.0f, fx, HEIGHT);
+      if (x % 7 == 0) {
+        eg_set_color(1.0f, 1.0f, 1.0f, 0.3f);
+        eg_draw_line(fx, 0.0f, fx, HEIGHT);
+        eg_set_color(0.5f, 0.5f, 0.5f, 0.5f);
+      }
+    }
+    for(int y = 0; y < GRID_HEIGHT; y++) {
+      float fy = y / (float)GRID_WIDTH * WIDTH;
+      eg_draw_line(0.0f, fy, WIDTH, fy);
+      if (y % 7 == 0) {
+        eg_set_color(1.0f, 1.0f, 1.0f, 0.3f);
+        eg_set_color(0.5f, 0.5f, 0.5f, 0.5f);
+      }
     }
 
-    eg_draw_square(agents[i].x - 0.5f*BUDDY_SIZE, agents[i].y - 0.5f*BUDDY_SIZE, BUDDY_SIZE, BUDDY_SIZE);
+    // draw agents
+    for(int i = 0; i < NUM_AGENTS; i++) {
 
-    // health bar
-    eg_set_color(0.0f, 0.0f, 0.0f, 1.0f);
-    eg_draw_square(agents[i].x - 15.0f, agents[i].y + 12.0f, 30.0f, 5.0f);
-    eg_set_color(1.0f, 1.0f, 0.5f, 1.0f);
-    eg_draw_square(agents[i].x - 15.0f, agents[i].y + 12.0f, agents[i].health * 30.0f / MAX_HEALTH, 5.0f);
+      // indicate orientation
+      eg_set_color(0.9f, 0.9f, 0.9f, 1.0f);
+      eg_draw_line(agents[i].x,
+                   agents[i].y,
+                   agents[i].x + (float)cos(agents[i].orientation) * 10.0F,
+                   agents[i].y + (float)sin(agents[i].orientation) * 10.0F,
+                   10);
 
-    // indicate orientation
-    eg_set_color(1.0f, 1.0f, 1.0f, 1.0f);
-    eg_draw_line(agents[i].x,
-                 agents[i].y,
-                 agents[i].x + (float)cos(agents[i].orientation) * 10.0F,
-                 agents[i].y + (float)sin(agents[i].orientation) * 10.0F,
-                 5);
+      // agent
+      eg_set_color(0.9f, 0.9f, 0.9f, 1.0f);
+      eg_draw_square(agents[i].x - 0.5f*BUDDY_SIZE, agents[i].y - 0.5f*BUDDY_SIZE, BUDDY_SIZE, BUDDY_SIZE);
+      eg_set_color(0.0f, 0.0f, 0.0f, 1.0f);
+      eg_draw_square(agents[i].x - 0.5f*BUDDY_SIZE*0.5f, agents[i].y - 0.5f*BUDDY_SIZE*0.5f, BUDDY_SIZE*0.5f, BUDDY_SIZE*0.5f);
+
+      // health bar
+      eg_set_color(0.2f, 0.2f, 0.2f, 0.7f);
+      eg_draw_square(agents[i].x - 15.0f, agents[i].y + 12.0f, 30.0f, 5.0f);
+      if (agents[i].health > MAX_HEALTH * 0.25f) {
+        eg_set_color(0.5f, 0.9f, 0.5f, 0.8f);
+      } else {
+        eg_set_color(0.8f, 0.3f, 0.3f, 0.8f);
+      }
+      eg_draw_square(agents[i].x - 15.0f, agents[i].y + 12.0f, agents[i].health * 30.0f / MAX_HEALTH, 5.0f);
+
+      // score bar
+      eg_set_color(0.2f, 0.2f, 0.2f, 0.7f);
+      eg_draw_square(agents[i].x - 15.0f, agents[i].y + 20.0f, 30.0f, 5.0f);
+      eg_set_color(0.9f, 0.85f, 0.0f, 0.8f);
+      eg_draw_square(agents[i].x - 15.0f, agents[i].y + 20.0f, 30.0f * ((float)agents[i].score / (float)agents[high_score_index].score), 5.0f);
+    }
+
+    // draw foods
+    for(int i = 0; i < FOOD_COUNT; i++) {
+      eg_set_color(0.0f, 0.8f, 0.0f, 1.0f - 0.5f * foods[i].value);
+      eg_draw_square(foods[i].x - 0.5f*FOOD_SIZE, foods[i].y - 0.5f*FOOD_SIZE, FOOD_SIZE, FOOD_SIZE);
+    }
+
+    // high score
+    eg_set_color(0.9f, 0.3f, 0.3f, 1.0f);
+    eg_draw_square(agents[high_score_index].x - 0.5f*BUDDY_SIZE, agents[high_score_index].y - 0.5f*BUDDY_SIZE, BUDDY_SIZE, BUDDY_SIZE);
+
+    eg_swap_buffers();
   }
 
-  // draw foods
-  eg_set_color(0.8f, 0.5f, 0.1f, 1.0f);
-  for(int i = 0; i < FOOD_COUNT; i++) {
-    eg_draw_square(foods[i].x - 0.5f*FOOD_SIZE, foods[i].y - 0.5f*FOOD_SIZE, FOOD_SIZE, FOOD_SIZE);
-  }
-
-  eg_swap_buffers();
+  frame++;
 }
 
 int main(int argc, char *argv[]) {
@@ -334,3 +367,19 @@ int main(int argc, char *argv[]) {
   return 0;
 }
 
+Food make_food() {
+  std::random_device rd;
+  std::mt19937 gen(rd());
+  std::uniform_real_distribution<float> fdis(0, 1);
+  float x = WIDTH * fdis(gen);
+  float y = HEIGHT * fdis(gen);
+  float dx = FLOW_DX * 0.5f + x / WIDTH * FLOW_DX * 0.5f;
+  float dy = FLOW_DY * 0.5f + x / HEIGHT * FLOW_DY;
+  float value = x / WIDTH;
+  Food f = {
+    x, y,
+    dx, dy,
+    value
+  };
+  return f;
+}
