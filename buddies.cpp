@@ -9,6 +9,7 @@
 using std::min;
 using std::max;
 
+const int   TURBO_RATE = 240; // how many simulation steps per render
 const int   WIDTH = 1280;
 const int   HEIGHT = 720;
 const int   GRID_WIDTH = WIDTH / 20;
@@ -162,6 +163,7 @@ int main(int argc, char *argv[]) {
 
   eg_init(WIDTH, HEIGHT, "Buddies");
 
+  int step = 0;
   Grid grid;
   Agent agents[NUM_AGENTS];
   Food foods[FOOD_COUNT];
@@ -268,74 +270,79 @@ int main(int argc, char *argv[]) {
       }
     }
 
-    eg_clear_screen(0.0f, 0.0f, 0.0f, 0.0f);
+    bool skip_render = eg_get_keystate(SDL_SCANCODE_F) && (step % TURBO_RATE != 0);
+    if(!skip_render) {
+      eg_clear_screen(0.0f, 0.0f, 0.0f, 0.0f);
 
-    // draw grid
-    eg_set_color(0.5f, 0.5f, 0.5f, 0.5f);
-    for(int x = 0; x < GRID_WIDTH; x++) {
-      float fx = x / (float)GRID_WIDTH * WIDTH;
-      eg_draw_line(fx, 0.0f, fx, HEIGHT);
-      if (x % 7 == 0) {
-        eg_set_color(1.0f, 1.0f, 1.0f, 0.3f);
+      // draw grid
+      eg_set_color(0.5f, 0.5f, 0.5f, 0.5f);
+      for(int x = 0; x < GRID_WIDTH; x++) {
+        float fx = x / (float)GRID_WIDTH * WIDTH;
         eg_draw_line(fx, 0.0f, fx, HEIGHT);
-        eg_set_color(0.5f, 0.5f, 0.5f, 0.5f);
+        if (x % 7 == 0) {
+          eg_set_color(1.0f, 1.0f, 1.0f, 0.3f);
+          eg_draw_line(fx, 0.0f, fx, HEIGHT);
+          eg_set_color(0.5f, 0.5f, 0.5f, 0.5f);
+        }
       }
-    }
-    for(int y = 0; y < GRID_HEIGHT; y++) {
-      float fy = y / (float)GRID_WIDTH * WIDTH;
-      eg_draw_line(0.0f, fy, WIDTH, fy);
-      if (y % 7 == 0) {
-        eg_set_color(1.0f, 1.0f, 1.0f, 0.3f);
+      for(int y = 0; y < GRID_HEIGHT; y++) {
+        float fy = y / (float)GRID_WIDTH * WIDTH;
         eg_draw_line(0.0f, fy, WIDTH, fy);
-        eg_set_color(0.5f, 0.5f, 0.5f, 0.5f);
+        if (y % 7 == 0) {
+          eg_set_color(1.0f, 1.0f, 1.0f, 0.3f);
+          eg_draw_line(0.0f, fy, WIDTH, fy);
+          eg_set_color(0.5f, 0.5f, 0.5f, 0.5f);
+        }
       }
-    }
 
-    // draw agents
-    for(int i = 0; i < NUM_AGENTS; i++) {
+      // draw agents
+      for(int i = 0; i < NUM_AGENTS; i++) {
 
-      // indicate orientation
-      eg_set_color(0.9f, 0.9f, 0.9f, 1.0f);
-      eg_draw_line(agents[i].x,
-                   agents[i].y,
-                   agents[i].x + (float)cos(agents[i].orientation) * 10.0F,
-                   agents[i].y + (float)sin(agents[i].orientation) * 10.0F,
-                   10);
+        // indicate orientation
+        eg_set_color(0.9f, 0.9f, 0.9f, 1.0f);
+        eg_draw_line(agents[i].x,
+                     agents[i].y,
+                     agents[i].x + (float)cos(agents[i].orientation) * 10.0F,
+                     agents[i].y + (float)sin(agents[i].orientation) * 10.0F,
+                     10);
 
-      // agent
-      eg_set_color(0.9f, 0.9f, 0.9f, 1.0f);
-      eg_draw_square(agents[i].x - 0.5f*BUDDY_SIZE, agents[i].y - 0.5f*BUDDY_SIZE, BUDDY_SIZE, BUDDY_SIZE);
-      eg_set_color(0.0f, 0.0f, 0.0f, 1.0f);
-      eg_draw_square(agents[i].x - 0.5f*BUDDY_SIZE*0.5f, agents[i].y - 0.5f*BUDDY_SIZE*0.5f, BUDDY_SIZE*0.5f, BUDDY_SIZE*0.5f);
+        // agent
+        eg_set_color(0.9f, 0.9f, 0.9f, 1.0f);
+        eg_draw_square(agents[i].x - 0.5f*BUDDY_SIZE, agents[i].y - 0.5f*BUDDY_SIZE, BUDDY_SIZE, BUDDY_SIZE);
+        eg_set_color(0.0f, 0.0f, 0.0f, 1.0f);
+        eg_draw_square(agents[i].x - 0.5f*BUDDY_SIZE*0.5f, agents[i].y - 0.5f*BUDDY_SIZE*0.5f, BUDDY_SIZE*0.5f, BUDDY_SIZE*0.5f);
 
-      // health bar
-      eg_set_color(0.2f, 0.2f, 0.2f, 0.7f);
-      eg_draw_square(agents[i].x - 15.0f, agents[i].y + 12.0f, 30.0f, 5.0f);
-      if (agents[i].health > MAX_HEALTH * 0.25f) {
-        eg_set_color(0.5f, 0.9f, 0.5f, 0.8f);
-      } else {
-        eg_set_color(0.8f, 0.3f, 0.3f, 0.8f);
+        // health bar
+        eg_set_color(0.2f, 0.2f, 0.2f, 0.7f);
+        eg_draw_square(agents[i].x - 15.0f, agents[i].y + 12.0f, 30.0f, 5.0f);
+        if (agents[i].health > MAX_HEALTH * 0.25f) {
+          eg_set_color(0.5f, 0.9f, 0.5f, 0.8f);
+        } else {
+          eg_set_color(0.8f, 0.3f, 0.3f, 0.8f);
+        }
+        eg_draw_square(agents[i].x - 15.0f, agents[i].y + 12.0f, agents[i].health * 30.0f / MAX_HEALTH, 5.0f);
+
+        // score bar
+        eg_set_color(0.2f, 0.2f, 0.2f, 0.7f);
+        eg_draw_square(agents[i].x - 15.0f, agents[i].y + 20.0f, 30.0f, 5.0f);
+        eg_set_color(0.9f, 0.85f, 0.0f, 0.8f);
+        eg_draw_square(agents[i].x - 15.0f, agents[i].y + 20.0f, 30.0f * ((float)agents[i].score / (float)agents[high_score_index].score), 5.0f);
       }
-      eg_draw_square(agents[i].x - 15.0f, agents[i].y + 12.0f, agents[i].health * 30.0f / MAX_HEALTH, 5.0f);
 
-      // score bar
-      eg_set_color(0.2f, 0.2f, 0.2f, 0.7f);
-      eg_draw_square(agents[i].x - 15.0f, agents[i].y + 20.0f, 30.0f, 5.0f);
-      eg_set_color(0.9f, 0.85f, 0.0f, 0.8f);
-      eg_draw_square(agents[i].x - 15.0f, agents[i].y + 20.0f, 30.0f * ((float)agents[i].score / (float)agents[high_score_index].score), 5.0f);
+      // draw foods
+      for(int i = 0; i < FOOD_COUNT; i++) {
+        eg_set_color(0.0f, 0.8f, 0.0f, 1.0f - 0.5f * foods[i].value);
+        eg_draw_square(foods[i].x - 0.5f*FOOD_SIZE, foods[i].y - 0.5f*FOOD_SIZE, FOOD_SIZE, FOOD_SIZE);
+      }
+
+      // high score
+      eg_set_color(0.9f, 0.3f, 0.3f, 1.0f);
+      eg_draw_square(agents[high_score_index].x - 0.5f*BUDDY_SIZE, agents[high_score_index].y - 0.5f*BUDDY_SIZE, BUDDY_SIZE, BUDDY_SIZE);
+
+      eg_swap_buffers();
     }
 
-    // draw foods
-    for(int i = 0; i < FOOD_COUNT; i++) {
-      eg_set_color(0.0f, 0.8f, 0.0f, 1.0f - 0.5f * foods[i].value);
-      eg_draw_square(foods[i].x - 0.5f*FOOD_SIZE, foods[i].y - 0.5f*FOOD_SIZE, FOOD_SIZE, FOOD_SIZE);
-    }
-
-    // high score
-    eg_set_color(0.9f, 0.3f, 0.3f, 1.0f);
-    eg_draw_square(agents[high_score_index].x - 0.5f*BUDDY_SIZE, agents[high_score_index].y - 0.5f*BUDDY_SIZE, BUDDY_SIZE, BUDDY_SIZE);
-
-    eg_swap_buffers();
+    step++;
   }
 
   eg_shutdown();
