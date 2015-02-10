@@ -1,6 +1,7 @@
 #include <cassert>
 #include <memory>
 #include <SDL/SDL.h>
+#include <SDL/SDL_mixer.h>
 #include <gl/gl.h>
 #include "easygame_emscripten.h"
 
@@ -20,6 +21,9 @@ void eg_init(int width, int height, const std::string &title) {
   glOrtho(0, width, 0, height, -1, 1);
   glEnable(GL_BLEND);
   glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+  Mix_Init(0);
+  Mix_OpenAudio(MIX_DEFAULT_FREQUENCY, MIX_DEFAULT_FORMAT, 2, 1024);
 
   initialized = true;
 }
@@ -126,3 +130,24 @@ void eg_draw_image(EGImage *img, float x, float y, float w, float h) {
   glBindTexture(GL_TEXTURE_2D, 0);
 }
 */
+
+struct EGSound {
+  Mix_Chunk *chunk;
+};
+
+EGSound *eg_load_sound(const std::string &filename) {
+  Mix_Chunk *chunk = Mix_LoadWAV(filename.c_str());
+  assert(chunk != nullptr);
+  EGSound *sound = new EGSound;
+  sound->chunk = chunk;
+  return sound;
+}
+
+void eg_free_sound(EGSound *sound) {
+  Mix_FreeChunk(sound->chunk);
+  delete sound;
+}
+
+void eg_play_sound(EGSound *sound) {
+  Mix_PlayChannel(-1, sound->chunk, 0);
+}

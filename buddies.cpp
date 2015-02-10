@@ -169,9 +169,12 @@ static Grid grid;
 static Agent agents[NUM_AGENTS];
 static Food foods[FOOD_COUNT];
 static bool quit = false;
+static EGSound *pickup_sound;
 
 void init() {
   eg_init(WIDTH, HEIGHT, "Buddies");
+
+  pickup_sound = eg_load_sound("assets/pickup.wav");
 
   for(int y = 0; y < GRID_HEIGHT; y++) {
     for(int x = 0; x < GRID_WIDTH; x++) {
@@ -264,6 +267,7 @@ void step() {
          agents[i].health = min(MAX_HEALTH, agents[i].health + FOOD_VALUE * foods[j].value);
          agents[i].score++;
          foods[j] = make_food();
+         eg_play_sound(pickup_sound);
          break;
        }
     }
@@ -355,7 +359,7 @@ int main(int argc, char *argv[]) {
   init();
 
 #ifdef __EMSCRIPTEN__
-  emscripten_set_main_loop(step, 60, 1);
+  emscripten_set_main_loop(step, 0, 1);
 #else
   while(!quit) {
     step();

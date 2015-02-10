@@ -27,13 +27,16 @@ void eg_set_color(float r, float g, float b, float a);
 void eg_draw_square(float x, float y, float w, float h);
 void eg_draw_line(float x0, float y0, float x1, float y1, float w = 1.0f);
 
-class EGImage;
+struct EGImage;
 EGImage *eg_load_image(const std::string &filename);
 void eg_free_image(EGImage *image);
 void eg_draw_image(EGImage *img, float x, float y, float w, float h);
 
 // audio
-// TODO
+struct EGSound;
+EGSound *eg_load_sound(const std::string &filename);
+void eg_free_sound(EGSound *sound);
+void eg_play_sound(EGSound *sound);
 
 // util
 template<typename T>

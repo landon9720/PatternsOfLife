@@ -33,7 +33,10 @@ void eg_free_image(EGImage *image);
 void eg_draw_image(EGImage *img, float x, float y, float w, float h);
 
 // audio
-// TODO
+struct EGSound;
+EGSound *eg_load_sound(const std::string &filename);
+void eg_free_sound(EGSound *sound);
+void eg_play_sound(EGSound *sound);
 
 // util
 template<typename T>

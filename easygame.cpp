@@ -2,6 +2,7 @@
 #include <memory>
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_image.h>
+#include <SDL2/SDL_mixer.h>
 #include <OpenGL/gl.h>
 #include "easygame.h"
 
@@ -32,6 +33,9 @@ void eg_init(int width, int height, const std::string &title) {
   glOrtho(0, width, 0, height, -1, 1);
   glEnable(GL_BLEND);
   glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+  Mix_Init(0);
+  Mix_OpenAudio(MIX_DEFAULT_FREQUENCY, MIX_DEFAULT_FORMAT, 2, 1024);
 
   initialized = true;
 }
@@ -120,6 +124,7 @@ EGImage *eg_load_image(const std::string &filename) {
 
 void eg_free_image(EGImage *image) {
   glDeleteTextures(1, &image->tex);
+  delete image;
 }
 
 void eg_draw_image(EGImage *img, float x, float y, float w, float h) {
@@ -135,4 +140,23 @@ void eg_draw_image(EGImage *img, float x, float y, float w, float h) {
 
   glDisable(GL_TEXTURE);
   glBindTexture(GL_TEXTURE_2D, 0);
+}
+
+struct EGSound {
+  Mix_Chunk *chunk;
+};
+
+EGSound *eg_load_sound(const std::string &filename) {
+  Mix_Chunk *chunk = Mix_LoadWAV(filename.c_str());
+  assert(chunk != nullptr);
+  return new EGSound { chunk };
+}
+
+void eg_free_sound(EGSound *sound) {
+  Mix_FreeChunk(sound->chunk);
+  delete sound;
+}
+
+void eg_play_sound(EGSound *sound) {
+  Mix_PlayChannel(-1, sound->chunk, 0);
 }
