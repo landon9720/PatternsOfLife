@@ -226,7 +226,7 @@ void step() {
     }
     float dx = foods[nearest_index].x - agents[i].x;
     float dy = foods[nearest_index].y - agents[i].y;
-    agent_inputs[i].nearest_food_relative_direction = atan2(dy, dx) - agents[i].orientation;
+    agent_inputs[i].nearest_food_relative_direction = angle_diff(atan2(dy, dx), agents[i].orientation);
     agent_inputs[i].nearest_food_distance = sqrtf(dx * dx + dy * dy);
     agent_inputs[i].self_health = agents[i].health;
   }
@@ -253,7 +253,7 @@ void step() {
     //
     agent_behaviors[i] = run_agent(&agents[i], agent_inputs[i]);
 
-    agents[i].orientation = agents[i].orientation + agent_behaviors[i].rotational_force;
+    agents[i].orientation = angle_diff(agents[i].orientation + agent_behaviors[i].rotational_force, 0.0f);
     agents[i].x = agents[i].x + DT * agent_behaviors[i].force * (float)cos(agents[i].orientation);
     agents[i].y = agents[i].y + DT * agent_behaviors[i].force * (float)sin(agents[i].orientation);
 
