@@ -49,6 +49,8 @@ const int ANN_NUM_INPUT = 4;
 const int ANN_NUM_HIDDEN = 7;
 const int ANN_NUM_OUTPUT = 2;
 
+float angle_diff(float a, float b);
+
 enum GridCell {
   GridCellEmpty,
   GridCellFull
@@ -387,3 +389,16 @@ Food make_food() {
   };
   return f;
 }
+
+float angle_diff(float a, float b) {
+  if(a > b) {
+    float x = fmod(a - b, 2*PI);
+    if(x > PI) x -= 2*PI;
+    return x;
+  } else {
+    float x = fmod(b - a, 2*PI);
+    if(x > PI) x -= 2*PI;
+    return -x;
+  }
+}
+
