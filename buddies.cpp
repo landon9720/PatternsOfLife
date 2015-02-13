@@ -15,6 +15,7 @@
 using std::min;
 using std::max;
 
+const float PI = 3.14159265359f;
 const int   TURBO_RATE = 240; // how many simulation steps per render
 const int   WIDTH = 1280;
 const int   HEIGHT = 720;
@@ -36,6 +37,8 @@ const float MAX_HEALTH = 100.0f;
 const float AGENT_MAX_FORCE = 100.0f;
 const float AGENT_MAX_ROTATIONAL_FORCE = M_PI / 40.0f;
 const float LEARNING_RATE = 0.010f;
+const int   MAX_PARTICLES = 1024;
+const float PARTICLE_VEL_DAMPING = 0.5f;
 
 const int NUM_AGENTS = 10;
 
@@ -48,6 +51,12 @@ const int NUM_AGENTS = 10;
 const int ANN_NUM_INPUT = 4;
 const int ANN_NUM_HIDDEN = 7;
 const int ANN_NUM_OUTPUT = 2;
+
+
+static std::random_device rd;
+static std::mt19937 gen(rd());
+static std::uniform_real_distribution<float> fdis(0, 1);
+
 
 float angle_diff(float a, float b);
 
@@ -105,10 +114,6 @@ void calculate_ann_input(AgentInput input, fann_type ann_input[ANN_NUM_INPUT]) {
 }
 
 Agent make_agent() {
-  std::random_device rd;
-  std::mt19937 gen(rd());
-  std::uniform_real_distribution<float> fdis(0, 1);
-
   Agent agent;
   // 1. agents start in a fixed location
   agent.x = WIDTH * 0.25f;
@@ -166,12 +171,20 @@ void print_ann(fann *ann) {
   }
 }
 
+struct Particle {
+  float life;
+  float x, y;
+  float vx, vy;
+  float color[4];
+};
+
 static int frame = 0;
 static Grid grid;
 static Agent agents[NUM_AGENTS];
 static Food foods[FOOD_COUNT];
 static bool quit = false;
 static EGSound *pickup_sound;
+static Particle particles[MAX_PARTICLES];
 
 void init() {
   eg_init(WIDTH, HEIGHT, "Buddies");
@@ -190,6 +203,10 @@ void init() {
 
   for(int i = 0; i < FOOD_COUNT; i++) {
     foods[i] = make_food();
+  }
+
+  for(int i = 0; i < MAX_PARTICLES; i++) {
+    particles[i].life = 0.0f;
   }
 }
 
@@ -276,9 +293,34 @@ void step() {
 
     // death
     if(agents[i].health <= 0.0f) {
-      if(agents[i].ann) fann_destroy(agents[i].ann);
+      for(int j = 0, n = 100; j < MAX_PARTICLES && n > 0; j++) {
+        if(particles[j].life <= 0.0f) {
+          particles[j].life = 1.0f;
+          particles[j].x = agents[i].x;
+          particles[j].y = agents[i].y;
+          float speed = 10.0f + fdis(gen) * 50.0f;
+          float angle = fdis(gen) * 2 * PI;
+          particles[j].vx = speed * cosf(angle);
+          particles[j].vy = speed * sinf(angle);
+          particles[j].color[0] = 1.0f;
+          particles[j].color[1] = 0.0f;
+          particles[j].color[2] = 0.0f;
+          particles[j].color[3] = 1.0f;
+          n--;
+        }
+      }
       agents[i] = make_agent();
     }
+  }
+
+  for(int i = 0; i < MAX_PARTICLES; i++) {
+    if(particles[i].life > 0.0f) {
+      particles[i].life -= DT;
+    }
+    particles[i].x += DT * particles[i].vx;
+    particles[i].y += DT * particles[i].vy;
+    particles[i].vx *= powf(PARTICLE_VEL_DAMPING, DT);
+    particles[i].vy *= powf(PARTICLE_VEL_DAMPING, DT);
   }
 
   bool skip_render = eg_get_keystate(SDL_SCANCODE_F) && (frame % TURBO_RATE != 0);
@@ -349,9 +391,17 @@ void step() {
     eg_set_color(0.9f, 0.3f, 0.3f, 1.0f);
     eg_draw_square(agents[high_score_index].x - 0.5f*BUDDY_SIZE, agents[high_score_index].y - 0.5f*BUDDY_SIZE, BUDDY_SIZE, BUDDY_SIZE);
 
+    // draw particles
+    for(int i = 0; i < MAX_PARTICLES; i++) {
+      if(particles[i].life > 0.0f) {
+        eg_set_color(particles[i].color[0], particles[i].color[1], particles[i].color[2], particles[i].color[3]);
+        eg_draw_point(particles[i].x, particles[i].y, 5.0f);
+      }
+    }
+
     eg_swap_buffers();
   }
-
+  
   frame++;
 }
 

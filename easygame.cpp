@@ -85,6 +85,13 @@ void eg_set_color(float r, float g, float b, float a) {
   glColor4f(r, g, b, a);
 }
 
+void eg_draw_point(float x, float y, float w) {
+  glPointSize(w);
+  glBegin(GL_POINTS);
+    glVertex2f(x, y);
+  glEnd();
+}
+
 void eg_draw_line(float x0, float y0, float x1, float y1, float w) {
   glLineWidth(w);
   glBegin(GL_LINES);

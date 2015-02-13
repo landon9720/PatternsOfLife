@@ -24,6 +24,7 @@ void eg_scale(float x, float y);
 void eg_translate(float x, float y);
 
 void eg_set_color(float r, float g, float b, float a);
+void eg_draw_point(float x, float y, float w = 1.0f);
 void eg_draw_square(float x, float y, float w, float h);
 void eg_draw_line(float x0, float y0, float x1, float y1, float w = 1.0f);
 
