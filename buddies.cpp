@@ -279,7 +279,19 @@ void step() {
     }
   }
 
-  bool skip_render = eg_get_keystate(SDL_SCANCODE_F) && (frame % TURBO_RATE != 0);
+  // f               for 4% turbo mode
+  // lshift-f        for 20% turbo mode
+  // lshift-rshift-f for 100% turbo mode
+  bool skip_render = false;
+  if (eg_get_keystate(SDL_SCANCODE_F)) {
+    int rate = int((float)TURBO_RATE * 0.04f);
+    bool l_shift = eg_get_keystate(SDL_SCANCODE_LSHIFT);
+    bool r_shift = eg_get_keystate(SDL_SCANCODE_RSHIFT);
+    if      (l_shift && ! r_shift ) rate = int((float)TURBO_RATE * 0.20f);
+    else if (l_shift &&   r_shift)  rate = TURBO_RATE;
+    skip_render = (frame % rate != 0);
+  }
+
   if(!skip_render) {
     eg_clear_screen(0.0f, 0.0f, 0.0f, 0.0f);
 
