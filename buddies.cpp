@@ -29,17 +29,17 @@ const float FLOW_DX = -0.002f;
 const float FLOW_DY = +0.001f;
 const float EAT_DISTANCE = 20.0f;
 const float HEALTH_DECAY = 0.2f;
-const float HEALTH_DECAY_CONSTANT = 0.01f;
+const float HEALTH_DECAY_CONSTANT = 0.2f;
 const float MAX_HEALTH = 100.0f;
-const float LEARNING_RATE = 0.1f;
-const int   RECORD_SAMPLE_RATE = 100;
+const float LEARNING_RATE = 0.01f;
+const int   RECORD_SAMPLE_RATE = 1;
 
 const int   NUM_AGENTS = 1;
 
 const int   ANN_NUM_INPUT = 2;
-const int   ANN_NUM_HIDDEN = 4;
+const int   ANN_NUM_HIDDEN = 10;
 const int   ANN_NUM_OUTPUT = 2;
-const int   ANN_NUM_CONNECTIONS = 22; // how to calculate this?
+const int   ANN_NUM_CONNECTIONS = 52; // how to calculate this?
 
 static std::random_device rd;
 static std::mt19937 gen(rd());
@@ -158,7 +158,7 @@ void init() {
     fann_set_activation_function_output(agents[i].ann, FANN_SIGMOID_SYMMETRIC);
     fann_set_training_algorithm(agents[i].ann, FANN_TRAIN_INCREMENTAL);
     fann_set_learning_rate(agents[i].ann, LEARNING_RATE);
-    // fann_randomize_weights(agents[i].ann, -1.0f, 1.0f);
+    fann_randomize_weights(agents[i].ann, -.10f, +.10f);
   }
 
   for(int i = 0; i < FOOD_COUNT; i++) {
@@ -166,6 +166,8 @@ void init() {
   }
 
   printf("number of connections: %d (%d)\n", fann_get_total_connections(agents[0].ann), ANN_NUM_CONNECTIONS);
+  assert(fann_get_total_connections(agents[0].ann) == ANN_NUM_CONNECTIONS);
+
 }
 
 void step() {
@@ -239,7 +241,7 @@ void step() {
     selected_index = i;
   }
 
-  ////
+  //// the behavior model
   ///
   //
   //
@@ -250,7 +252,6 @@ void step() {
     float ann_input[ANN_NUM_INPUT];
     ann_input[0] = agent_inputs[i].nearest_food_relative_direction;
     ann_input[1] = agent_inputs[i].nearest_food_distance;
-    // ann_input[2] = agent_inputs[i].self_health;
     printf("ann_input[0]=%f\nann_input[1]=%f\n", ann_input[0], ann_input[1]);
 
     float *ann_output = fann_run(agents[i].ann, ann_input);
@@ -260,7 +261,6 @@ void step() {
       ann_output[0],
       ann_output[1]
     };
-
     printf("b.rotational=%f\nb.linear=%f\n", b.rotational, b.linear);
 
     //
@@ -276,8 +276,8 @@ void step() {
       float distance = sqrtf(dx_to_mouse * dx_to_mouse + dy_to_mouse * dy_to_mouse);
       printf("delta_radians=%f\n", delta_radians);
       printf("distance=%f\n", distance);
-      float fog_rotational_behavior = delta_radians;
-      float fog_linear_behavior = distance;
+      float fog_rotational_behavior = max(min(delta_radians, +1.0f), -1.0f);
+      float fog_linear_behavior = max(min(distance, +1.0f), -1.0f);
       printf("fog_rotational_behavior=%f\n", fog_rotational_behavior);
       printf("fog_linear_behavior=%f\n", fog_linear_behavior);
       float ann_output_train[ANN_NUM_OUTPUT] = {
@@ -288,7 +288,7 @@ void step() {
       printf("ann_output_train[0]=%f\nann_output_train[1]=%f\n", ann_output_train[0], ann_output_train[1]);
     }
 
-    // update agent orientation and position model
+    // update agent orientation and position
     agents[i].orientation = angle_diff(agents[i].orientation + b.rotational, 0.0f);
     agents[i].x = agents[i].x + b.linear * (float)cos(agents[i].orientation);
     agents[i].y = agents[i].y + b.linear * (float)sin(agents[i].orientation);
@@ -334,7 +334,7 @@ void step() {
       //   target_connections[i].weight = source_connections[i].weight;
       //   fann_set_weight_array(target_ann, target_connections, num_conn);
       // } else {
-      //   //fann_randomize_weights(agents[i].ann, -1.0f, 1.0f);
+        fann_randomize_weights(agents[i].ann, -.10f, +.10f);
       // }
     }
   }
@@ -405,18 +405,21 @@ void step() {
                    agents[i].y + (float)sin(agents[i].orientation) * 10.0F,
                    10);
 
-      // indicate nearest food sensor
+
+      // indicate nearest food (by food index)
       eg_set_color(1.0f, 1.0f, 1.0f, 0.4f);
       eg_draw_line(agents[i].x,
                    agents[i].y,
-                   foods[food_index[i]].x,// + (float)cos(agents[i].orientation + agent_inputs[i].nearest_food_relative_direction) * agent_inputs[i].nearest_food_distance,
-                   foods[food_index[i]].y,//agents[i].y + (float)sin(agents[i].orientation + agent_inputs[i].nearest_food_relative_direction) * agent_inputs[i].nearest_food_distance,
+                   foods[food_index[i]].x,
+                   foods[food_index[i]].y,
                    2);
-       eg_draw_line(agents[i].x,
-                    agents[i].y,
-                    agents[i].x + (float)cos(agents[i].orientation + agent_inputs[i].nearest_food_relative_direction) * agent_inputs[i].nearest_food_distance,
-                    agents[i].y + (float)sin(agents[i].orientation + agent_inputs[i].nearest_food_relative_direction) * agent_inputs[i].nearest_food_distance,
-                    2);
+
+      // indicate nearest food (by sensor)             
+      eg_draw_line(agents[i].x,
+                   agents[i].y,
+                   agents[i].x + (float)cos(agents[i].orientation + agent_inputs[i].nearest_food_relative_direction) * agent_inputs[i].nearest_food_distance,
+                   agents[i].y + (float)sin(agents[i].orientation + agent_inputs[i].nearest_food_relative_direction) * agent_inputs[i].nearest_food_distance,
+                   2);
 
       // agent
       float buddy_size = BUDDY_SIZE * (agents[i].parent_index == -1 ? 1.0f : 0.6f);
@@ -467,8 +470,8 @@ void step() {
           else             eg_set_color(0.5f, 0.5f, 0.5f, 1.0f);
           float w = records[rx].weights[wi];
           float h;
-          if (w > 0.0f) h = w * 10.0f;
-          else h = -w * 10.0f;
+          if (w > 0.0f) h = w * 30.0f;
+          else h = log(-w * 30.0f);
           eg_draw_line(rx, y, rx, y + h, 1.5f);
           y += h;
           // total score graph
