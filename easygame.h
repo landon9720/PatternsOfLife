@@ -44,5 +44,6 @@ T clamp(const T &x, const T &a, const T &b) {
   return std::max(std::min(x, b), a);
 }
 
-#endif
+float angle_diff(float a, float b);
 
+#endif

@@ -15,13 +15,12 @@ using std::min;
 using std::max;
 
 const int   TURBO_RATE = 240; // how many simulation steps per render
-const int   WIDTH = 1280/2;
-const int   HEIGHT = 720/2;
+const int   WIDTH = 1280;///2;
+const int   HEIGHT = 720;///2;
 const int   GRID_WIDTH = WIDTH / 20;
 const int   GRID_HEIGHT = HEIGHT / 20;
 const float GRID_CELL_WIDTH = (float)WIDTH / (float)GRID_WIDTH;
 const float GRID_CELL_HEIGHT = (float)HEIGHT / (float)GRID_HEIGHT;
-const float DT = 1.0f/60.0f;
 const float BUDDY_SIZE = 10.0f;
 const float FOOD_SIZE = 6.0f;
 const int   FOOD_COUNT = 100;
@@ -32,23 +31,19 @@ const float EAT_DISTANCE = 20.0f;
 const float HEALTH_DECAY = 0.2f;
 const float HEALTH_DECAY_CONSTANT = 0.01f;
 const float MAX_HEALTH = 100.0f;
-const float AGENT_MAX_FORCE = 100.0f;
-const float AGENT_MAX_ROTATIONAL_FORCE = M_PI / 40.0f;
-const float LEARNING_RATE = 1.0f;
+const float LEARNING_RATE = 0.1f;
 const int   RECORD_SAMPLE_RATE = 100;
 
 const int   NUM_AGENTS = 1;
 
-const int   ANN_NUM_INPUT = 3;
+const int   ANN_NUM_INPUT = 2;
 const int   ANN_NUM_HIDDEN = 4;
 const int   ANN_NUM_OUTPUT = 2;
-const int   ANN_NUM_CONNECTIONS = 26; // how to calculate this?
+const int   ANN_NUM_CONNECTIONS = 22; // how to calculate this?
 
 static std::random_device rd;
 static std::mt19937 gen(rd());
 static std::uniform_real_distribution<float> fdis(0, 1);
-
-float angle_diff(float a, float b);
 
 enum GridCell {
   GridCellEmpty,
@@ -77,16 +72,14 @@ struct Food {
   float value;
 };
 
-Food make_food();
-
 struct AgentInput {
   float nearest_food_relative_direction;
   float nearest_food_distance;
-  float self_health;
 };
 
 struct AgentBehavior {
-  float rotational_force, force;
+  float rotational ; // rotational (twising and turning) behavior of the agent
+  float linear     ; // forward moving (in the direction of orientation) behavior of the agent
 };
 
 struct Agent {
@@ -112,6 +105,17 @@ void init_agent(Agent *agent) {
   agent->score = 0;
 }
 
+Food make_food() {
+  float x = WIDTH * fdis(gen);
+  float y = HEIGHT * fdis(gen);
+  float dx = FLOW_DX * 0.5f + x / WIDTH * FLOW_DX * 0.5f;
+  float dy = FLOW_DY * 0.5f + x / HEIGHT * FLOW_DY;
+  Food f = {
+    x, y,
+    dx, dy
+  };
+  return f;
+}
 
 void print_ann(fann *ann) {
   int num_conn = fann_get_total_connections(ann);
@@ -152,8 +156,8 @@ void init() {
     agents[i].ann = fann_create_standard(3, ANN_NUM_INPUT, ANN_NUM_HIDDEN, ANN_NUM_OUTPUT);
     fann_set_activation_function_hidden(agents[i].ann, FANN_SIGMOID_SYMMETRIC);
     fann_set_activation_function_output(agents[i].ann, FANN_SIGMOID_SYMMETRIC);
-    // fann_set_training_algorithm(agents[i].ann, FANN_TRAIN_INCREMENTAL);
-    // fann_set_learning_rate(agents[i].ann, LEARNING_RATE);
+    fann_set_training_algorithm(agents[i].ann, FANN_TRAIN_INCREMENTAL);
+    fann_set_learning_rate(agents[i].ann, LEARNING_RATE);
     // fann_randomize_weights(agents[i].ann, -1.0f, 1.0f);
   }
 
@@ -165,6 +169,8 @@ void init() {
 }
 
 void step() {
+
+  // handle user events
   EGEvent event;
   while (eg_poll_event(&event)) {
     if (event.type == SDL_QUIT) {
@@ -175,7 +181,7 @@ void step() {
     }
   }
 
-  // food model
+  // update food model
   for(int i = 0; i < FOOD_COUNT; i++) {
     foods[i].x += foods[i].dx;
     foods[i].y += foods[i].dy;
@@ -184,31 +190,36 @@ void step() {
     }
   }
 
-  // agent model
-  AgentInput agent_inputs[NUM_AGENTS];
-  for(int i = 0; i < NUM_AGENTS; i++) {
-    int nearest_index;
+  // food index maps every agent to its nearest food
+  int food_index[NUM_AGENTS];
+  for (int i = 0; i < NUM_AGENTS; i++) {
     float nearest_dist_sq;
-    for(int j = 0; j < FOOD_COUNT; j++) {
+    for (int j = 0; j < FOOD_COUNT; j++) {
       float dx = foods[j].x - agents[i].x;
       float dy = foods[j].y - agents[i].y;
       float dist_sq = (dx*dx) + (dy*dy);
-      if(j == 0 || dist_sq < nearest_dist_sq) {
-        nearest_index = j;
+      if (j == 0 || dist_sq < nearest_dist_sq) {
+        food_index[i] = j;
         nearest_dist_sq = dist_sq;
       }
     }
-    float dx = foods[nearest_index].x - agents[i].x;
-    float dy = foods[nearest_index].y - agents[i].y;
+  }
+
+  // map the food index to the agent input model
+  AgentInput agent_inputs[NUM_AGENTS];
+  for (int i = 0; i < NUM_AGENTS; i++) {
+    float dx = foods[food_index[i]].x - agents[i].x;
+    float dy = foods[food_index[i]].y - agents[i].y;
     agent_inputs[i].nearest_food_relative_direction = angle_diff(atan2(dy, dx), agents[i].orientation);
     agent_inputs[i].nearest_food_distance = sqrtf(dx * dx + dy * dy);
-    agent_inputs[i].self_health = agents[i].health;
+    printf("agent_inputs[i].nearest_food_relative_direction=%f\n", agent_inputs[i].nearest_food_relative_direction);
+    printf("agent_inputs[i].nearest_food_distance=%f\n", agent_inputs[i].nearest_food_distance);
   }
 
   // index of high scoring agent
   int high_score_index = 0;
-  for(int i = 1; i < NUM_AGENTS; i++) {
-    if(agents[i].score > agents[high_score_index].score) {
+  for (int i = 1; i < NUM_AGENTS; i++) {
+    if (agents[i].score > agents[high_score_index].score) {
       high_score_index = i;
     }
   }
@@ -239,49 +250,51 @@ void step() {
     float ann_input[ANN_NUM_INPUT];
     ann_input[0] = agent_inputs[i].nearest_food_relative_direction;
     ann_input[1] = agent_inputs[i].nearest_food_distance;
-    ann_input[2] = agent_inputs[i].self_health;
-    printf("ann_input[0]=%f ann_input[1]=%f ann_input[2]=%f\n", ann_input[0], ann_input[1], ann_input[2]);
+    // ann_input[2] = agent_inputs[i].self_health;
+    printf("ann_input[0]=%f\nann_input[1]=%f\n", ann_input[0], ann_input[1]);
 
     float *ann_output = fann_run(agents[i].ann, ann_input);
-    printf("ann_output[0]=%f ann_output[1]=%f\n", ann_output[0], ann_output[1]);
+    printf("ann_output[0]=%f\nann_output[1]=%f\n", ann_output[0], ann_output[1]);
 
     AgentBehavior b = {
-      AGENT_MAX_ROTATIONAL_FORCE * ann_output[0],
-      AGENT_MAX_FORCE * ann_output[1]
+      ann_output[0],
+      ann_output[1]
     };
 
-    printf("b.force=%f b.rotational_force=%f\n", b.force, b.rotational_force);
+    printf("b.rotational=%f\nb.linear=%f\n", b.rotational, b.linear);
 
+    //
+    //
+    // train via mouse
     int mouse_x, mouse_y;
     SDL_PumpEvents();
     if (SDL_GetMouseState(&mouse_x, &mouse_y) & SDL_BUTTON(SDL_BUTTON_LEFT)) {
       float dx_to_mouse =  (float)mouse_x - agents[i].x;
       float dy_to_mouse = ((float)HEIGHT - (float)mouse_y) - agents[i].y;
       float fog_rotation = atan2(dy_to_mouse, dx_to_mouse);
-      float delta = angle_diff(fog_rotation, agents[i].orientation);
-      printf("delta=%f\n", delta);
-      float fog_rotational_force;
-      if (delta > 0.0f)
-        fog_rotational_force = max(delta, AGENT_MAX_ROTATIONAL_FORCE);
-      else
-        fog_rotational_force = min(delta, AGENT_MAX_ROTATIONAL_FORCE);
-      printf("fog_rotational_force=%f\n", fog_rotational_force);
+      float delta_radians = angle_diff(fog_rotation, agents[i].orientation);
+      float distance = sqrtf(dx_to_mouse * dx_to_mouse + dy_to_mouse * dy_to_mouse);
+      printf("delta_radians=%f\n", delta_radians);
+      printf("distance=%f\n", distance);
+      float fog_rotational_behavior = delta_radians;
+      float fog_linear_behavior = distance;
+      printf("fog_rotational_behavior=%f\n", fog_rotational_behavior);
+      printf("fog_linear_behavior=%f\n", fog_linear_behavior);
       float ann_output_train[ANN_NUM_OUTPUT] = {
-        fog_rotational_force,
-        ann_output[1]
+        fog_rotational_behavior,
+        fog_linear_behavior
       };
       fann_train(agents[i].ann, ann_input, ann_output_train);
-      printf("ann_output_train[0]=%f ann_output_train[1]=%f\n", ann_output_train[0], ann_output_train[1]);
+      printf("ann_output_train[0]=%f\nann_output_train[1]=%f\n", ann_output_train[0], ann_output_train[1]);
     }
 
     // update agent orientation and position model
-    agents[i].orientation = angle_diff(agents[i].orientation + b.rotational_force, 0.0f);
-    agents[i].x = agents[i].x + DT * b.force * (float)cos(agents[i].orientation);
-    agents[i].y = agents[i].y + DT * b.force * (float)sin(agents[i].orientation);
+    agents[i].orientation = angle_diff(agents[i].orientation + b.rotational, 0.0f);
+    agents[i].x = agents[i].x + b.linear * (float)cos(agents[i].orientation);
+    agents[i].y = agents[i].y + b.linear * (float)sin(agents[i].orientation);
 
-    // decay health as a function of force and time
-    float new_health = agents[i].health - ((DT * HEALTH_DECAY * abs(b.force)) + HEALTH_DECAY_CONSTANT);
-    agents[i].health = max(0.0f, new_health);
+    // decay health as a function of time
+    agents[i].health = max(0.0f, agents[i].health - HEALTH_DECAY_CONSTANT);
 
     for (int j = 0; j < FOOD_COUNT; j++) {
        float dx = foods[j].x - agents[i].x;
@@ -396,9 +409,14 @@ void step() {
       eg_set_color(1.0f, 1.0f, 1.0f, 0.4f);
       eg_draw_line(agents[i].x,
                    agents[i].y,
-                   agents[i].x + (float)cos(agents[i].orientation + agent_inputs[i].nearest_food_relative_direction) * agent_inputs[i].nearest_food_distance,
-                   agents[i].y + (float)sin(agents[i].orientation + agent_inputs[i].nearest_food_relative_direction) * agent_inputs[i].nearest_food_distance,
+                   foods[food_index[i]].x,// + (float)cos(agents[i].orientation + agent_inputs[i].nearest_food_relative_direction) * agent_inputs[i].nearest_food_distance,
+                   foods[food_index[i]].y,//agents[i].y + (float)sin(agents[i].orientation + agent_inputs[i].nearest_food_relative_direction) * agent_inputs[i].nearest_food_distance,
                    2);
+       eg_draw_line(agents[i].x,
+                    agents[i].y,
+                    agents[i].x + (float)cos(agents[i].orientation + agent_inputs[i].nearest_food_relative_direction) * agent_inputs[i].nearest_food_distance,
+                    agents[i].y + (float)sin(agents[i].orientation + agent_inputs[i].nearest_food_relative_direction) * agent_inputs[i].nearest_food_distance,
+                    2);
 
       // agent
       float buddy_size = BUDDY_SIZE * (agents[i].parent_index == -1 ? 1.0f : 0.6f);
@@ -482,30 +500,4 @@ int main(int argc, char *argv[]) {
   eg_shutdown();
 
   return 0;
-}
-
-Food make_food() {
-  float x = WIDTH * fdis(gen);
-  float y = HEIGHT * fdis(gen);
-  float dx = FLOW_DX * 0.5f + x / WIDTH * FLOW_DX * 0.5f;
-  float dy = FLOW_DY * 0.5f + x / HEIGHT * FLOW_DY;
-  float value = x / WIDTH;
-  Food f = {
-    x, y,
-    dx, dy,
-    value
-  };
-  return f;
-}
-
-float angle_diff(float a, float b) {
-  if(a > b) {
-    float x = fmod(a - b, 2*M_PI);
-    if(x > M_PI) x -= 2*M_PI;
-    return x;
-  } else {
-    float x = fmod(b - a, 2*M_PI);
-    if(x > M_PI) x -= 2*M_PI;
-    return -x;
-  }
 }

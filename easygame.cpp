@@ -160,3 +160,15 @@ void eg_free_sound(EGSound *sound) {
 void eg_play_sound(EGSound *sound) {
   Mix_PlayChannel(-1, sound->chunk, 0);
 }
+
+float angle_diff(float a, float b) {
+  if(a > b) {
+    float x = fmod(a - b, 2*M_PI);
+    if(x > M_PI) x -= 2*M_PI;
+    return x;
+  } else {
+    float x = fmod(b - a, 2*M_PI);
+    if(x > M_PI) x -= 2*M_PI;
+    return -x;
+  }
+}
