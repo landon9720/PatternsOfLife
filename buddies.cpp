@@ -31,15 +31,15 @@ const float EAT_DISTANCE = 20.0f;
 const float HEALTH_DECAY = 0.2f;
 const float HEALTH_DECAY_CONSTANT = 0.2f;
 const float MAX_HEALTH = 100.0f;
-const float LEARNING_RATE = 0.01f;
+const float LEARNING_RATE = 0.3f;
 const int   RECORD_SAMPLE_RATE = 1;
 
-const int   NUM_AGENTS = 1;
+const int   NUM_AGENTS = 3;
 
 const int   ANN_NUM_INPUT = 2;
 const int   ANN_NUM_HIDDEN = 10;
 const int   ANN_NUM_OUTPUT = 2;
-const int   ANN_NUM_CONNECTIONS = 52; // how to calculate this?
+const int   ANN_NUM_CONNECTIONS = 6; // how to calculate this?
 
 static std::random_device rd;
 static std::mt19937 gen(rd());
@@ -69,7 +69,6 @@ struct Grid {
 struct Food {
   float x, y;
   float dx, dy;
-  float value;
 };
 
 struct AgentInput {
@@ -138,6 +137,7 @@ static       bool quit                = false ;
 static    EGSound *pickup_sound               ;
 static     Record records[WIDTH]              ;
 static        int records_index       = 0     ;
+static        int frame_rate          = 1     ;
 
 void init() {
 
@@ -153,12 +153,12 @@ void init() {
 
   for(int i = 0; i < NUM_AGENTS; i++) {
     init_agent(&agents[i]);
-    agents[i].ann = fann_create_standard(3, ANN_NUM_INPUT, ANN_NUM_HIDDEN, ANN_NUM_OUTPUT);
+    agents[i].ann = fann_create_standard(2, ANN_NUM_INPUT, ANN_NUM_OUTPUT);
     fann_set_activation_function_hidden(agents[i].ann, FANN_SIGMOID_SYMMETRIC);
     fann_set_activation_function_output(agents[i].ann, FANN_SIGMOID_SYMMETRIC);
     fann_set_training_algorithm(agents[i].ann, FANN_TRAIN_INCREMENTAL);
     fann_set_learning_rate(agents[i].ann, LEARNING_RATE);
-    fann_randomize_weights(agents[i].ann, -.10f, +.10f);
+    fann_randomize_weights(agents[i].ann, -.01f, +.01f);
   }
 
   for(int i = 0; i < FOOD_COUNT; i++) {
@@ -175,11 +175,37 @@ void step() {
   // handle user events
   EGEvent event;
   while (eg_poll_event(&event)) {
-    if (event.type == SDL_QUIT) {
-      quit = true;
-    } else if (event.type == SDL_MOUSEBUTTONDOWN) {
-      SDL_MouseButtonEvent e = event.button;
-      printf("SDL_MOUSEBUTTONDOWN button=%d state=%d x=%d y=%d\n", e.button, e.state, e.x, e.y);
+    switch (event.type) {
+      case SDL_QUIT: {
+        quit = true;
+        break;
+      }
+      case SDL_MOUSEBUTTONDOWN: {
+        SDL_MouseButtonEvent e = event.button;
+        printf("SDL_MOUSEBUTTONDOWN button=%d state=%d x=%d y=%d\n", e.button, e.state, e.x, e.y);
+        break;
+      }
+      case SDL_KEYDOWN: {
+        SDL_KeyboardEvent e = event.key;
+        printf("SDL_KEYDOWN scancode=%d\n", e.keysym.scancode);
+        switch (e.keysym.scancode) {
+          case SDL_SCANCODE_1:
+            frame_rate = 1;
+            break;
+          case SDL_SCANCODE_2:
+            frame_rate = int((float)TURBO_RATE * 0.04f);
+            break;
+          case SDL_SCANCODE_3:
+            frame_rate = int((float)TURBO_RATE * 0.20f);
+            break;
+          case SDL_SCANCODE_4:
+            frame_rate = TURBO_RATE;
+            break;
+          default:
+            break;
+        }
+        break;
+      }
     }
   }
 
@@ -296,12 +322,13 @@ void step() {
     // decay health as a function of time
     agents[i].health = max(0.0f, agents[i].health - HEALTH_DECAY_CONSTANT);
 
+    // eat near food
     for (int j = 0; j < FOOD_COUNT; j++) {
        float dx = foods[j].x - agents[i].x;
        float dy = foods[j].y - agents[i].y;
        float dist_sq = (dx*dx) + (dy*dy);
        if(dist_sq < EAT_DISTANCE*EAT_DISTANCE) {
-         agents[i].health = min(MAX_HEALTH, agents[i].health + FOOD_VALUE * foods[j].value);
+         agents[i].health = min(MAX_HEALTH, agents[i].health + FOOD_VALUE);
          agents[i].score++;
          foods[j] = make_food();
 //         eg_play_sound(pickup_sound);
@@ -320,22 +347,15 @@ void step() {
 
       init_agent(&agents[i]);
 
-      // if (agents[selected_index].score > 0) {
-      //   agents[i].parent_index = selected_index;
-      //   agents[i].x = agents[selected_index].x;
-      //   agents[i].y = agents[selected_index].y;
-      //   fann *source_ann = agents[selected_index].ann;
-      //   fann *target_ann = agents[i].ann;
-      //   int num_conn = fann_get_total_connections(source_ann);
-      //   fann_connection source_connections[num_conn];
-      //   fann_get_connection_array(source_ann, source_connections);
-      //   fann_connection target_connections[num_conn];
-      //   fann_get_connection_array(target_ann, target_connections);
-      //   target_connections[i].weight = source_connections[i].weight;
-      //   fann_set_weight_array(target_ann, target_connections, num_conn);
-      // } else {
-        fann_randomize_weights(agents[i].ann, -.10f, +.10f);
-      // }
+      if (agents[selected_index].score > 0) {
+        agents[i].parent_index = selected_index;
+        agents[i].x = agents[selected_index].x;
+        agents[i].y = agents[selected_index].y;
+        fann_destroy(agents[i].ann);
+        agents[i].ann = fann_copy(agents[selected_index].ann);
+      } else {
+        fann_randomize_weights(agents[i].ann, -.01f, +.01f);
+      }
     }
   }
 
@@ -353,19 +373,7 @@ void step() {
     records[records_index].total_score = total_score;
   }
 
-  // f               for 4% turbo mode
-  // lshift-f        for 20% turbo mode
-  // lshift-rshift-f for 100% turbo mode
-  bool skip_render = false;
-  if (eg_get_keystate(SDL_SCANCODE_F)) {
-    int rate = int((float)TURBO_RATE * 0.04f);
-    bool l_shift = eg_get_keystate(SDL_SCANCODE_LSHIFT);
-    bool r_shift = eg_get_keystate(SDL_SCANCODE_RSHIFT);
-    if      (l_shift && ! r_shift ) rate = int((float)TURBO_RATE * 0.20f);
-    else if (l_shift &&   r_shift)  rate = TURBO_RATE;
-    skip_render = (frame % rate != 0);
-  }
-
+  bool skip_render = (frame % frame_rate != 0);
   if (!skip_render) {
     eg_clear_screen(0.0f, 0.0f, 0.0f, 0.0f);
 
@@ -414,7 +422,7 @@ void step() {
                    foods[food_index[i]].y,
                    2);
 
-      // indicate nearest food (by sensor)             
+      // indicate nearest food (by sensor)
       eg_draw_line(agents[i].x,
                    agents[i].y,
                    agents[i].x + (float)cos(agents[i].orientation + agent_inputs[i].nearest_food_relative_direction) * agent_inputs[i].nearest_food_distance,
@@ -452,7 +460,7 @@ void step() {
 
     // draw foods
     for(int i = 0; i < FOOD_COUNT; i++) {
-      eg_set_color(0.0f, 0.8f, 0.0f, 1.0f - 0.5f * foods[i].value);
+      eg_set_color(0.0f, 0.8f, 0.0f, 1.0f);
       eg_draw_square(foods[i].x - 0.5f*FOOD_SIZE, foods[i].y - 0.5f*FOOD_SIZE, FOOD_SIZE, FOOD_SIZE);
     }
 
@@ -470,13 +478,14 @@ void step() {
           else             eg_set_color(0.5f, 0.5f, 0.5f, 1.0f);
           float w = records[rx].weights[wi];
           float h;
-          if (w > 0.0f) h = w * 30.0f;
-          else h = log(-w * 30.0f);
+          if (w > 0.0f) h = w;
+          else h = -w;
+          h = log(h) * 50.0f;
           eg_draw_line(rx, y, rx, y + h, 1.5f);
           y += h;
           // total score graph
           eg_set_color(0.8f, 0.8f, 0.8f, 1.0f);
-          eg_draw_line(rx, HEIGHT, rx, HEIGHT - records[rx].total_score, 1.5f);
+          eg_draw_line(rx, HEIGHT, rx, HEIGHT - log(records[rx].total_score) * 10.0f, 1.5f);
         }
       }
     }
