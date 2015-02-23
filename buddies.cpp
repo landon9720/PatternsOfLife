@@ -31,7 +31,7 @@ const float HEALTH_DECAY_CONSTANT = 0.1f;
 const float MAX_HEALTH = 100.0f;
 const int   RECORD_SAMPLE_RATE = 1;
 
-const int   NUM_AGENTS = 3;
+const int   NUM_AGENTS = 20;
 
 const int   ANN_NUM_INPUT = 2;
 const int   ANN_NUM_HIDDEN = 10;
@@ -131,9 +131,9 @@ void init_agent(Agent *agent) {
   agent->ann = fann_create_standard(2, ANN_NUM_INPUT, ANN_NUM_OUTPUT);
 
                  fann_randomize_weights(agent->ann, -0.1f, +0.1f);
-    fann_set_activation_function_hidden(agent->ann, FANN_SIN_SYMMETRIC);
-    fann_set_activation_function_output(agent->ann, FANN_SIN_SYMMETRIC);
-   fann_set_activation_steepness_hidden(agent->ann, 0.01f);
+    fann_set_activation_function_hidden(agent->ann, FANN_SIGMOID_SYMMETRIC);
+    fann_set_activation_function_output(agent->ann, FANN_SIGMOID_SYMMETRIC);
+   fann_set_activation_steepness_hidden(agent->ann, 0.02f);
    fann_set_activation_steepness_output(agent->ann, 0.01f);
             fann_set_training_algorithm(agent->ann, FANN_TRAIN_INCREMENTAL);
                  fann_set_learning_rate(agent->ann, 0.01f);
