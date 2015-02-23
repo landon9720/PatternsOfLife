@@ -46,4 +46,6 @@ T clamp(const T &x, const T &a, const T &b) {
 
 float angle_diff(float a, float b);
 
+void hsv_to_rgb(float h, float s, float v, float *r, float *g, float *b);
+
 #endif

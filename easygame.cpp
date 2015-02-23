@@ -62,7 +62,10 @@ void eg_reset_transform() {
   glLoadIdentity();
 }
 
-//void eg_rotate(float r);
+void eg_rotate(float r) {
+    glMatrixMode(GL_MODELVIEW);
+    glRotatef(r, 0, 0, 1);
+}
 //void eg_scale(float x, float y);
 
 void eg_translate(float x, float y) {
@@ -170,5 +173,47 @@ float angle_diff(float a, float b) {
     float x = fmod(b - a, 2*M_PI);
     if(x > M_PI) x -= 2*M_PI;
     return -x;
+  }
+}
+
+
+// from http://martin.ankerl.com/2009/12/09/how-to-create-random-colors-programmatically/
+void hsv_to_rgb(float h, float s, float v, float *r, float *g, float *b) {
+  int h_i = h * 6;
+  float f = h * 6 - h_i;
+  float p = v * (1 - s);
+  float q = v * (1 - f * s);
+  float t = v * (1 - (1 - f) * s);
+  switch (h_i) {
+    case 0:
+      *r = v;
+      *g = t;
+      *b = p;
+    break;
+    case 1:
+      *r = q;
+      *g = v;
+      *b = p;
+    break;
+    case 2:
+      *r = p;
+      *g = v;
+      *b = t;
+    break;
+    case 3:
+      *r = p;
+      *g = q;
+      *b = v;
+    break;
+    case 4:
+      *r = t;
+      *g = p;
+      *b = v;
+    break;
+    case 5:
+      *r = v;
+      *g = p;
+      *b = q;
+    break;
   }
 }
