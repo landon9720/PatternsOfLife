@@ -24,14 +24,14 @@ const float GRID_CELL_WIDTH = (float)WIDTH / (float)GRID_WIDTH;
 const float GRID_CELL_HEIGHT = (float)HEIGHT / (float)GRID_HEIGHT;
 const float BUDDY_SIZE = 10.0f;
 const float FOOD_SIZE = 6.0f;
-const int   FOOD_COUNT = 4;
 const float FOOD_VALUE =  100.0f;
 const float EAT_DISTANCE = 16.0f;
-const float HEALTH_DECAY_CONSTANT = 0.01f;
+const float HEALTH_DECAY_CONSTANT = 0.1f;
 const float MAX_HEALTH = 100.0f;
 const int   RECORD_SAMPLE_RATE = 1;
 
-const int   MAX_AGENTS = 100;
+const int MAX_AGENTS = 100;
+const int MAX_FOODS = 400;
 
 const int   ANN_NUM_INPUT = 2;
 const int   ANN_NUM_HIDDEN = 10;
@@ -100,11 +100,20 @@ struct Record {
 b2Vec2 gravity(0.0f, 0.0f);
 b2World world(gravity);
 
-void init_agent(Agent *agent) {
-
+void deinit_agent(Agent *agent) {
+  if (agent->ann) {
+    fann_destroy(agent->ann);
+    agent->ann = 0;
+  }
   if (agent->body) {
     world.DestroyBody(agent->body);
+    agent->body = 0;
   }
+}
+
+void init_agent(Agent *agent) {
+
+  deinit_agent(agent);
 
   b2BodyDef bodyDef;
   bodyDef.type = b2_dynamicBody;
@@ -125,9 +134,7 @@ void init_agent(Agent *agent) {
   b2Body *b = world.CreateBody(&bodyDef);
   b->CreateFixture(&fixtureDef);
 
-  if (agent->ann) {
-    fann_destroy(agent->ann);
-  }
+
 
   agent->ann = fann_create_standard(2, ANN_NUM_INPUT, ANN_NUM_OUTPUT);
 
@@ -146,10 +153,16 @@ void init_agent(Agent *agent) {
   agent->hue = fdis(gen);
 }
 
-void init_food(Food *food) {
+void deinit_food(Food *food) {
   if (food->body) {
     world.DestroyBody(food->body);
+    food->body = 0;
   }
+}
+
+void init_food(Food *food) {
+
+  deinit_food(food);
 
   b2BodyDef bodyDef;
   bodyDef.type = b2_dynamicBody;
@@ -180,14 +193,15 @@ void print_ann(fann *ann) {
   printf("MSE: %f\n", fann_get_MSE(ann));
 }
 
-static        int frame               = 0     ;
-static       Grid grid                        ;
-static      Agent agents[MAX_AGENTS]          ;
-static        int num_agents          = 1     ;
-static AgentBehavior agent_behaviors[MAX_AGENTS] ;
-static AgentBehavior fog_behaviors[MAX_AGENTS]   ;
-static bool          fog_flags[MAX_AGENTS]       ;
-static       Food foods[FOOD_COUNT]           ;
+static           int frame               = 0        ;
+static          Grid grid                           ;
+static         Agent agents[MAX_AGENTS]             ;
+static           int num_agents          = 1        ;
+static AgentBehavior agent_behaviors[MAX_AGENTS]    ;
+static AgentBehavior fog_behaviors[MAX_AGENTS]      ;
+static          bool fog_flags[MAX_AGENTS]          ;
+static          Food foods[MAX_FOODS]               ;
+static           int num_foods           = 1        ;
 static       bool quit                = false ;
 static    EGSound *pickup_sound               ;
 static     Record records[WIDTH]              ;
@@ -218,13 +232,8 @@ void init() {
     }
   }
 
-  for(int i = 0; i < num_agents; i++) {
-    init_agent(&agents[i]);
-  }
-
-  for (int i = 0; i < FOOD_COUNT; i++) {
-    init_food(&foods[i]);
-  }
+  init_agent(&agents[0]);
+  init_food(&foods[0]);
 
   printf("actual number of connections: %d (ANN_NUM_CONNECTIONS=%d)\n", fann_get_total_connections(agents[0].ann), ANN_NUM_CONNECTIONS);
   assert(fann_get_total_connections(agents[0].ann) == ANN_NUM_CONNECTIONS);
@@ -277,6 +286,30 @@ void step() {
           case SDL_SCANCODE_D:
             delete_agent = true;
             break;
+          case 45: // -
+            if (e.keysym.mod & KMOD_SHIFT) {
+              if (num_foods != 1) {
+                deinit_food(&foods[num_foods-1]);
+                --num_foods;
+              }
+            } else {
+              if (num_agents != 1) {
+                deinit_agent(&agents[num_agents-1]);
+                --num_agents;
+              }
+            }
+            break;
+          case 46: // +
+            if (e.keysym.mod & KMOD_SHIFT) {
+              if (num_foods < MAX_FOODS) {
+                init_food(&foods[num_foods++]);
+              }
+            } else {
+              if (num_agents < MAX_AGENTS) {
+                init_agent(&agents[num_agents++]);
+              }
+            }
+            break;
           default:
             break;
         }
@@ -288,7 +321,7 @@ void step() {
   if (pause && ! nudge) return;
   nudge = false;
 
-  for (int i = 0; i < FOOD_COUNT; i++) {
+  for (int i = 0; i < num_foods; i++) {
       if (foods[i].body->GetPosition().x < 0 || foods[i].body->GetPosition().x > WIDTH
       || foods[i].body->GetPosition().y < 0 || foods[i].body->GetPosition().y > HEIGHT) {
         init_food(&foods[i]);
@@ -304,7 +337,7 @@ void step() {
   int food_index[num_agents];
   for (int i = 0; i < num_agents; i++) {
     float nearest_dist_sq;
-    for (int j = 0; j < FOOD_COUNT; j++) {
+    for (int j = 0; j < num_foods; j++) {
       float dx = foods[j].body->GetPosition().x - agents[i].body->GetPosition().x;
       float dy = foods[j].body->GetPosition().y - agents[i].body->GetPosition().y;
       float dist_sq = (dx*dx) + (dy*dy);
@@ -410,7 +443,7 @@ void step() {
     }
 
     // eat near food
-    for (int j = 0; j < FOOD_COUNT; j++) {
+    for (int j = 0; j < num_foods; j++) {
        float dx = foods[j].body->GetPosition().x - agents[i].body->GetPosition().x;
        float dy = foods[j].body->GetPosition().y - agents[i].body->GetPosition().y;
        float dist_sq = (dx*dx) + (dy*dy);
@@ -425,7 +458,7 @@ void step() {
     // death
     if (agents[i].health <= 0.0f) {
 
-      for (int j = 0; j < NUM_AGENTS; j++) {
+      for (int j = 0; j < num_agents; j++) {
         if (agents[j].parent_index == i) {
           agents[j].parent_index = -1;
         }
@@ -559,7 +592,7 @@ void step() {
     }
 
     // draw foods
-    for(int i = 0; i < FOOD_COUNT; i++) {
+    for(int i = 0; i < num_foods; i++) {
       eg_set_color(0.0f, 0.8f, 0.0f, 1.0f);
       eg_translate(foods[i].body->GetPosition().x, foods[i].body->GetPosition().y);
       eg_rotate(foods[i].body->GetAngle());
