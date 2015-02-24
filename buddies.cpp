@@ -24,14 +24,14 @@ const float GRID_CELL_WIDTH = (float)WIDTH / (float)GRID_WIDTH;
 const float GRID_CELL_HEIGHT = (float)HEIGHT / (float)GRID_HEIGHT;
 const float BUDDY_SIZE = 10.0f;
 const float FOOD_SIZE = 6.0f;
-const int   FOOD_COUNT = 100;
+const int   FOOD_COUNT = 4;
 const float FOOD_VALUE =  100.0f;
 const float EAT_DISTANCE = 16.0f;
-const float HEALTH_DECAY_CONSTANT = 0.1f;
+const float HEALTH_DECAY_CONSTANT = 0.01f;
 const float MAX_HEALTH = 100.0f;
 const int   RECORD_SAMPLE_RATE = 1;
 
-const int   NUM_AGENTS = 20;
+const int   NUM_AGENTS = 1;
 
 const int   ANN_NUM_INPUT = 2;
 const int   ANN_NUM_HIDDEN = 10;
@@ -97,7 +97,7 @@ struct Record {
   float fog_linear;
 };
 
-b2Vec2 gravity(0.0f, -.1f);
+b2Vec2 gravity(0.0f, 0.0f);
 b2World world(gravity);
 
 void init_agent(Agent *agent) {
@@ -135,7 +135,7 @@ void init_agent(Agent *agent) {
     fann_set_activation_function_hidden(agent->ann, FANN_SIGMOID_SYMMETRIC);
     fann_set_activation_function_output(agent->ann, FANN_SIGMOID_SYMMETRIC);
    fann_set_activation_steepness_hidden(agent->ann, 0.02f);
-   fann_set_activation_steepness_output(agent->ann, 0.01f);
+   fann_set_activation_steepness_output(agent->ann, 0.19f);
             fann_set_training_algorithm(agent->ann, FANN_TRAIN_INCREMENTAL);
                  fann_set_learning_rate(agent->ann, 0.01f);
 
@@ -195,6 +195,7 @@ static        int frame_rate          = 1     ;
 static       bool pause               = false ;
 static       bool nudge               = false ;
 static       bool draw_record         = false ;
+static       bool delete_agent        = false ;
 
 void init() {
   //
@@ -271,6 +272,10 @@ void step() {
             break;
           case SDL_SCANCODE_TAB:
             draw_record = !draw_record;
+            break;
+          case SDL_SCANCODE_D:
+            delete_agent = true;
+            break;
           default:
             break;
         }
@@ -398,6 +403,10 @@ void step() {
 
     // decay health as a function of time
     agents[i].health -= HEALTH_DECAY_CONSTANT;
+    if (delete_agent && i == selected_index) {
+        delete_agent = false;
+        agents[i].health = -1.0f;
+    }
 
     // eat near food
     for (int j = 0; j < FOOD_COUNT; j++) {
@@ -626,6 +635,8 @@ int main(int argc, char *argv[]) {
     step();
   }
 #endif
+
+  printf("%d\n", frame);
 
   eg_shutdown();
 
