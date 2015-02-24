@@ -83,11 +83,12 @@ struct Agent {
   int score;
   fann *ann;
   b2Body *body;
+  float hue;
 };
 
 struct Record {
   float weights[ANN_NUM_CONNECTIONS];
-    int total_score;
+    int scores[NUM_AGENTS];
   float mse;
   float rotational;
   float linear;
@@ -142,6 +143,7 @@ void init_agent(Agent *agent) {
   agent->health = MAX_HEALTH;
   agent->score = 0;
   agent->body = b;
+  agent->hue = fdis(gen);
 }
 
 void init_food(Food *food) {
@@ -195,13 +197,13 @@ static       bool nudge               = false ;
 static       bool draw_record         = false ;
 
 void init() {
-
+  //
   // b2BodyDef groundBodyDef;
-  // groundBodyDef.position.Set(WIDTH / 2.0f, HEIGHT / 2.0f);
-  // groundBodyDef.angle = -M_PI / 10.0f;
+  // groundBodyDef.position.Set(WIDTH / 2.0f, 0.0f);
+  // groundBodyDef.angle = 0.0f;
   // b2Body* groundBody = world.CreateBody(&groundBodyDef);
   // b2PolygonShape groundBox;
-  // groundBox.SetAsBox(WIDTH / 3.0f, 1.0f);
+  // groundBox.SetAsBox(WIDTH / 2.0f, 1.0f);
   // groundBody->CreateFixture(&groundBox, 0.0f);
 
   eg_init(WIDTH, HEIGHT, "Buddies");
@@ -421,7 +423,7 @@ void step() {
 
       init_agent(&agents[i]);
 
-      if (agents[selected_index].score > 0) {
+      if (fdis(gen) < 0.9f && agents[selected_index].score > 0) {
         agents[i].parent_index = selected_index;
         // agents[i].x = agents[selected_index].x;
         // agents[i].y = agents[selected_index].y;
@@ -434,7 +436,7 @@ void step() {
         fann_get_connection_array(target_ann, target_connections);
         for (int j = 0; j < num_conn; j++) {
           if (fdis(gen) < 0.3f) {
-            target_connections[j].weight = source_connections[j].weight + ((fdis(gen) * 0.6f) - 0.3f);
+            target_connections[j].weight = source_connections[j].weight + ((fdis(gen) * 0.60f) - 0.30f);
           } else {
             target_connections[j].weight = source_connections[j].weight;
           }
@@ -455,7 +457,9 @@ void step() {
     for (int i = 0; i < num_conn; i++) {
       records[records_index].weights[i] = connections[i].weight;
     }
-    records[records_index].total_score = total_score;
+    for (int i = 0; i < NUM_AGENTS; i++) {
+        records[records_index].scores[i] = agents[i].score;
+    }
     records[records_index].mse = fann_get_MSE(agents[selected_index].ann);
     records[records_index].rotational = agent_behaviors[selected_index].rotational;
     records[records_index].linear = agent_behaviors[selected_index].linear;
@@ -497,7 +501,9 @@ void step() {
     for (int i = 0; i < NUM_AGENTS; i++) {
 
       // indicate orientation
-      eg_set_color(0.9f, 0.9f, 0.9f, 1.0f);
+      float r, g, b;
+      hsv_to_rgb(agents[i].hue, 1.0f, 1.0f, &r, &g, &b);
+      eg_set_color(r, g, b, 1.0f);
       eg_draw_line(agents[i].body->GetPosition().x,
                    agents[i].body->GetPosition().y,
                    agents[i].body->GetPosition().x + (float)cos(agents[i].body->GetAngle()) * 10.0F,
@@ -506,7 +512,7 @@ void step() {
 
 
       // indicate nearest food (by food index)
-      eg_set_color(1.0f, 1.0f, 1.0f, 0.4f);
+      eg_set_color(0.9f, 0.9f, 0.9f, 0.3f);
       eg_draw_line(agents[i].body->GetPosition().x,
                    agents[i].body->GetPosition().y,
                    foods[food_index[i]].body->GetPosition().x,
@@ -576,8 +582,12 @@ void step() {
           y += h;
         }
         // total score graph
-        eg_set_color(0.8f, 0.8f, 0.8f, 1.0f);
-        eg_draw_line(rx, HEIGHT, rx, HEIGHT - log(record.total_score) * 10.0f, 1.5f);
+        for (int i = 0; i < NUM_AGENTS; ++i) {
+          float r, g, b;
+          hsv_to_rgb(agents[i].hue, 0.60f, 0.90f, &r, &g, &b);
+          eg_set_color(r, g, b, 1.0f);
+          eg_draw_square(rx, HEIGHT - record.scores[i], 1.0f, 1.0f);
+        }
         // mse graph
         eg_set_color(1.0f, 0.0f, 0.0f, .9f);
         eg_draw_square(rx, record.mse * 100.0f, 1.0f, 1.0f);
