@@ -573,24 +573,22 @@ void step() {
     // record model
     if (draw_record) {
       // ann weight graph
-      eg_set_color(0, 0, 0, 0.7f);
-      eg_draw_square(0, 0, WIDTH, 100);
+      eg_set_color(0, 0, 0, 0.4f);
+      eg_draw_square(0, 0, WIDTH, 280);
       for (int rx = 0; rx < WIDTH; rx++) {
         Record record = records[(records_index + WIDTH - rx) % WIDTH];
         float y = 100.0f;
         float total_weight = 0.0f;
         for (int wi = 0; wi < ANN_NUM_CONNECTIONS; wi++) {
-            total_weight += record.weights[wi];
+            total_weight += fabs(record.weights[wi]);
         }
         for (int wi = 0; wi < ANN_NUM_CONNECTIONS; wi++) {
           float r, g, b;
           float hue = (float)wi / (float)ANN_NUM_CONNECTIONS;
           while (hue > 1.0f) hue -= 1.0f;
-          hsv_to_rgb(hue, 0.60f, 0.90f, &r, &g, &b);
+          hsv_to_rgb(hue, 0.90f, 0.90f, &r, &g, &b);
           eg_set_color(r, g, b, 0.8f);
-          float w = record.weights[wi];
-          if (w < 0.0f) w *= -1;
-          float h = w / total_weight * 100.0f;
+          float h = (fabs(record.weights[wi]) / total_weight) * 180.0f;
           eg_draw_line(rx, y, rx, y + h, 1.5f);
           y += h;
         }
