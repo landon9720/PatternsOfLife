@@ -31,7 +31,7 @@ const float HEALTH_DECAY_CONSTANT = 0.01f;
 const float MAX_HEALTH = 100.0f;
 const int   RECORD_SAMPLE_RATE = 1;
 
-const int   NUM_AGENTS = 1;
+const int   MAX_AGENTS = 100;
 
 const int   ANN_NUM_INPUT = 2;
 const int   ANN_NUM_HIDDEN = 10;
@@ -88,7 +88,7 @@ struct Agent {
 
 struct Record {
   float weights[ANN_NUM_CONNECTIONS];
-    int scores[NUM_AGENTS];
+    int scores[MAX_AGENTS];
   float mse;
   float rotational;
   float linear;
@@ -182,10 +182,11 @@ void print_ann(fann *ann) {
 
 static        int frame               = 0     ;
 static       Grid grid                        ;
-static      Agent agents[NUM_AGENTS]          ;
-static AgentBehavior agent_behaviors[NUM_AGENTS] ;
-static AgentBehavior fog_behaviors[NUM_AGENTS]   ;
-static bool          fog_flags[NUM_AGENTS]       ;
+static      Agent agents[MAX_AGENTS]          ;
+static        int num_agents          = 1     ;
+static AgentBehavior agent_behaviors[MAX_AGENTS] ;
+static AgentBehavior fog_behaviors[MAX_AGENTS]   ;
+static bool          fog_flags[MAX_AGENTS]       ;
 static       Food foods[FOOD_COUNT]           ;
 static       bool quit                = false ;
 static    EGSound *pickup_sound               ;
@@ -217,7 +218,7 @@ void init() {
     }
   }
 
-  for(int i = 0; i < NUM_AGENTS; i++) {
+  for(int i = 0; i < num_agents; i++) {
     init_agent(&agents[i]);
   }
 
@@ -300,8 +301,8 @@ void step() {
   world.Step(timeStep, velocityIterations, positionIterations);
 
   // food index maps every agent to its nearest food
-  int food_index[NUM_AGENTS];
-  for (int i = 0; i < NUM_AGENTS; i++) {
+  int food_index[num_agents];
+  for (int i = 0; i < num_agents; i++) {
     float nearest_dist_sq;
     for (int j = 0; j < FOOD_COUNT; j++) {
       float dx = foods[j].body->GetPosition().x - agents[i].body->GetPosition().x;
@@ -315,8 +316,8 @@ void step() {
   }
 
   // map the food index to the agent input model
-  AgentInput agent_inputs[NUM_AGENTS];
-  for (int i = 0; i < NUM_AGENTS; i++) {
+  AgentInput agent_inputs[num_agents];
+  for (int i = 0; i < num_agents; i++) {
     float dx = foods[food_index[i]].body->GetPosition().x - agents[i].body->GetPosition().x;
     float dy = foods[food_index[i]].body->GetPosition().y - agents[i].body->GetPosition().y;
     agent_inputs[i].nearest_food_relative_direction = angle_diff(atan2(dy, dx), agents[i].body->GetAngle());
@@ -327,7 +328,7 @@ void step() {
 
   // index of high scoring agent
   int high_score_index = 0;
-  for (int i = 1; i < NUM_AGENTS; i++) {
+  for (int i = 1; i < num_agents; i++) {
     if (agents[i].score > agents[high_score_index].score) {
       high_score_index = i;
     }
@@ -339,11 +340,11 @@ void step() {
   // index of selected agent
   int selected_index = 0;
   int total_score = 0;
-  for (int i = 0; i < NUM_AGENTS; i++) {
+  for (int i = 0; i < num_agents; i++) {
     total_score += agents[i].score;
   }
   int random_score = (int)(fdis(gen) * (float)total_score);
-  for (int i = 0; i < NUM_AGENTS && random_score >= 0.0f; i++) {
+  for (int i = 0; i < num_agents && random_score >= 0.0f; i++) {
     random_score -= agents[i].score;
     selected_index = i;
   }
@@ -354,7 +355,7 @@ void step() {
   //
   //
   //
-  for (int i = 0; i < NUM_AGENTS; i++) {
+  for (int i = 0; i < num_agents; i++) {
 
     float ann_input[ANN_NUM_INPUT];
     ann_input[0] = agent_inputs[i].nearest_food_relative_direction;
@@ -466,7 +467,7 @@ void step() {
     for (int i = 0; i < num_conn; i++) {
       records[records_index].weights[i] = connections[i].weight;
     }
-    for (int i = 0; i < NUM_AGENTS; i++) {
+    for (int i = 0; i < num_agents; i++) {
         records[records_index].scores[i] = agents[i].score;
     }
     records[records_index].mse = fann_get_MSE(agents[selected_index].ann);
@@ -507,7 +508,7 @@ void step() {
     //
     //
     // draw agents
-    for (int i = 0; i < NUM_AGENTS; i++) {
+    for (int i = 0; i < num_agents; i++) {
 
       // indicate orientation
       float r, g, b;
@@ -593,7 +594,7 @@ void step() {
           y += h;
         }
         // total score graph
-        for (int i = 0; i < NUM_AGENTS; ++i) {
+        for (int i = 0; i < num_agents; ++i) {
           float r, g, b;
           hsv_to_rgb(agents[i].hue, 0.60f, 0.90f, &r, &g, &b);
           eg_set_color(r, g, b, 1.0f);
@@ -626,7 +627,6 @@ void step() {
 }
 
 int main(int argc, char *argv[]) {
-  assert(NUM_AGENTS >= 1);
 
   init();
 
