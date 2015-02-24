@@ -577,7 +577,11 @@ void step() {
       eg_draw_square(0, 0, WIDTH, 100);
       for (int rx = 0; rx < WIDTH; rx++) {
         Record record = records[(records_index + WIDTH - rx) % WIDTH];
-        float y = 101.0f;
+        float y = 100.0f;
+        float total_weight = 0.0f;
+        for (int wi = 0; wi < ANN_NUM_CONNECTIONS; wi++) {
+            total_weight += record.weights[wi];
+        }
         for (int wi = 0; wi < ANN_NUM_CONNECTIONS; wi++) {
           float r, g, b;
           float hue = (float)wi / (float)ANN_NUM_CONNECTIONS;
@@ -586,7 +590,7 @@ void step() {
           eg_set_color(r, g, b, 0.8f);
           float w = record.weights[wi];
           if (w < 0.0f) w *= -1;
-          float h = w * 100.0f + 5.0f;
+          float h = w / total_weight * 100.0f;
           eg_draw_line(rx, y, rx, y + h, 1.5f);
           y += h;
         }
