@@ -22,7 +22,7 @@ void eg_init(int width, int height, const std::string &title) {
       SDL_WINDOWPOS_UNDEFINED,
       SDL_WINDOWPOS_UNDEFINED,
       width, height,
-      SDL_WINDOW_OPENGL|SDL_WINDOW_ALLOW_HIGHDPI);
+      SDL_WINDOW_OPENGL|SDL_WINDOW_ALLOW_HIGHDPI|SDL_WINDOW_FULLSCREEN_DESKTOP);
 
   SDL_SetWindowFullscreen(window, 0);
   SDL_GL_CreateContext(window);
@@ -54,8 +54,16 @@ bool eg_get_keystate(int scancode) {
   return keystate[scancode];
 }
 
-//void eg_push_transform();
-//void eg_pop_transform();
+void eg_push_transform() {
+  glMatrixMode(GL_MODELVIEW);
+  glPushMatrix();
+
+}
+
+void eg_pop_transform() {
+  glMatrixMode(GL_MODELVIEW);
+  glPopMatrix();
+}
 
 void eg_reset_transform() {
   glMatrixMode(GL_MODELVIEW);
@@ -63,10 +71,14 @@ void eg_reset_transform() {
 }
 
 void eg_rotate(float r) {
-    glMatrixMode(GL_MODELVIEW);
-    glRotatef(r, 0, 0, 1);
+  glMatrixMode(GL_MODELVIEW);
+  glRotatef(r, 0, 0, 1);
 }
-//void eg_scale(float x, float y);
+
+void eg_scale(float x, float y) {
+  glMatrixMode(GL_MODELVIEW);
+  glScalef(x, y, 1.0f);
+}
 
 void eg_translate(float x, float y) {
   glMatrixMode(GL_MODELVIEW);
