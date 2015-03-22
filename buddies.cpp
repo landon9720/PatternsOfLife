@@ -20,7 +20,6 @@ const int ANN_NUM_HIDDEN = 10;
 const int ANN_NUM_OUTPUT = 4;
 const int ANN_NUM_CONNECTIONS = 74; // how to calculate this? ¯\_(ツ)_/¯
 
-
 void cubic_to_axial(int x, int y, int z, int &q, int &r) {
   q = x;
   r = z;
@@ -145,10 +144,6 @@ struct Record {
 };
 
 void deinit_agent(Agent *agent) {
-  if (agent->ann) {
-    fann_destroy(agent->ann);
-    agent->ann = 0;
-  }
   WorldHex *hex = hex_axial(agent->q, agent->r);
   if (hex != 0) {
     hex->agent = 0;
@@ -158,9 +153,6 @@ void deinit_agent(Agent *agent) {
 void init_agent(Agent *agent) {
 
   deinit_agent(agent);
-
-  agent->ann =
-      fann_create_standard(3, ANN_NUM_INPUT, ANN_NUM_HIDDEN, ANN_NUM_OUTPUT);
 
   fann_randomize_weights(agent->ann, -1.0f, 1.0f);
   fann_set_activation_function_hidden(agent->ann, FANN_SIGMOID_SYMMETRIC);
@@ -212,15 +204,20 @@ void unit_tests() {
   assert(1 == axial_distance(0, 0, 0, 1));
   assert(10 == axial_distance(0, 0, 10, 0));
 
-  Agent test_agent = Agent();
-  init_agent(&test_agent);
+  fann *test_ann = fann_create_standard(3, ANN_NUM_INPUT, ANN_NUM_HIDDEN, ANN_NUM_OUTPUT);
   printf("actual number of connections: %d (ANN_NUM_CONNECTIONS=%d)\n",
-         fann_get_total_connections(test_agent.ann), ANN_NUM_CONNECTIONS);
-  assert(fann_get_total_connections(test_agent.ann) == ANN_NUM_CONNECTIONS);
-  deinit_agent(&test_agent);
+         fann_get_total_connections(test_ann), ANN_NUM_CONNECTIONS);
+  assert(fann_get_total_connections(test_ann) == ANN_NUM_CONNECTIONS);
+  fann_destroy(test_ann);
 }
 
-void init() { eg_init(WIDTH, HEIGHT, "Buddies3"); }
+void init() {
+  eg_init(WIDTH, HEIGHT, "Buddies3");
+  for (int i = 0; i < MAX_AGENTS; i++) {
+    agents[i].ann =
+        fann_create_standard(3, ANN_NUM_INPUT, ANN_NUM_HIDDEN, ANN_NUM_OUTPUT);
+  }
+}
 
 void step() {
 
