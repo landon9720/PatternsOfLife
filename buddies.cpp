@@ -1,12 +1,11 @@
 #include "buddies.h"
 
 struct Agent;
-struct Food;
 
 struct WorldHex {
   bool blocked;
+  bool food;
   Agent *agent;
-  Food *food;
 };
 
 const int HEX_SIZE = 15;
@@ -14,6 +13,13 @@ const int WIDTH = 1280;
 const int HEIGHT = 720;
 const int Q = 114;
 const int R = 80;
+const int WORLD_SIZE = Q * R;
+
+const int ANN_NUM_INPUT = 2;
+const int ANN_NUM_HIDDEN = 10;
+const int ANN_NUM_OUTPUT = 4;
+const int ANN_NUM_CONNECTIONS = 74; // how to calculate this? ¯\_(ツ)_/¯
+
 
 void cubic_to_axial(int x, int y, int z, int &q, int &r) {
   q = x;
@@ -26,7 +32,7 @@ void axial_to_cubic(int q, int r, int &x, int &y, int &z) {
   y = -x - z;
 }
 
-static WorldHex world[Q * R];
+static WorldHex world[WORLD_SIZE];
 
 WorldHex *hex_axial(int q, int r) {
   if (q < 0 || q >= Q || r < 0 || r >= R) {
@@ -99,30 +105,18 @@ int axial_distance(int q0, int r0, int q1, int r1) {
 const int RECORD_SAMPLE_RATE = 100;
 const int TURBO_RATE = 300; // how many simulation steps per render
 const float AGENT_SIZE = 10.0f;
-const float FOOD_SIZE = 6.0f;
 const float FOOD_VALUE = 100.0f;
 const float EAT_DISTANCE = 16.0f;
 const float MAX_HEALTH = 100.0f;
 
 const int MAX_AGENTS = 200;
-const int MAX_FOODS = Q * R - MAX_AGENTS;
-
-const int ANN_NUM_INPUT = 2;
-const int ANN_NUM_HIDDEN = 8;
-const int ANN_NUM_OUTPUT = 4;
-const int ANN_NUM_CONNECTIONS = 60; // how to calculate this? ¯\_(ツ)_/¯
 
 static std::random_device rd;
 static std::mt19937 gen(rd());
 static std::uniform_real_distribution<float> fdis(0, 1);
 
-struct Food {
-  int q, r;
-};
-
 struct AgentInput {
-  // int nearest_food_relative_direction;
-  int nearest_food_distance;
+  int forward_food_distance;
   float self_health;
 };
 
@@ -171,10 +165,10 @@ void init_agent(Agent *agent) {
   fann_randomize_weights(agent->ann, -1.0f, 1.0f);
   fann_set_activation_function_hidden(agent->ann, FANN_SIGMOID_SYMMETRIC);
   fann_set_activation_function_output(agent->ann, FANN_SIGMOID_SYMMETRIC);
-  fann_set_activation_steepness_hidden(agent->ann, 0.10f);
-  fann_set_activation_steepness_output(agent->ann, 0.19f);
-  fann_set_training_algorithm(agent->ann, FANN_TRAIN_INCREMENTAL);
-  fann_set_learning_rate(agent->ann, 0.1f);
+  fann_set_activation_steepness_hidden(agent->ann, 0.50f);
+  fann_set_activation_steepness_output(agent->ann, 0.50f);
+  // fann_set_training_algorithm(agent->ann, FANN_TRAIN_INCREMENTAL);
+  // fann_set_learning_rate(agent->ann, 0.1f);
 
   agent->parent_index = -1;
   agent->health = MAX_HEALTH;
@@ -191,27 +185,14 @@ void init_agent(Agent *agent) {
   hex_axial(agent->q, agent->r)->agent = agent;
 }
 
-void init_food(Food *food) {
-  WorldHex *hex;
-  do {
-    food->q = Q * fdis(gen);
-    food->r = R * fdis(gen);
-    hex = hex_axial(food->q, food->r);
-  } while (hex == 0 || hex->food != 0);
-  hex_axial(food->q, food->r)->food = food;
-}
-
 static int frame = 0;
 
 static Agent agents[MAX_AGENTS];
 
-static int num_agents = 1;
+static int num_agents = 0;
+static float food_spawn_rate = 0.001f;
 
 static AgentBehavior agent_behaviors[MAX_AGENTS];
-// static AgentBehavior fog_behaviors[MAX_AGENTS];
-
-static Food foods[MAX_FOODS];
-static int num_foods = 1;
 
 static Record records[WIDTH];
 static int records_index = 0;
@@ -230,16 +211,16 @@ void unit_tests() {
   assert(2 == axial_distance(0, 0, 1, 1));
   assert(1 == axial_distance(0, 0, 0, 1));
   assert(10 == axial_distance(0, 0, 10, 0));
+
+  Agent test_agent = Agent();
+  init_agent(&test_agent);
+  printf("actual number of connections: %d (ANN_NUM_CONNECTIONS=%d)\n",
+         fann_get_total_connections(test_agent.ann), ANN_NUM_CONNECTIONS);
+  assert(fann_get_total_connections(test_agent.ann) == ANN_NUM_CONNECTIONS);
+  deinit_agent(&test_agent);
 }
 
-void init() {
-  eg_init(WIDTH, HEIGHT, "Buddies2");
-  init_agent(&agents[0]);
-  init_food(&foods[0]);
-  printf("actual number of connections: %d (ANN_NUM_CONNECTIONS=%d)\n",
-         fann_get_total_connections(agents[0].ann), ANN_NUM_CONNECTIONS);
-  assert(fann_get_total_connections(agents[0].ann) == ANN_NUM_CONNECTIONS);
-}
+void init() { eg_init(WIDTH, HEIGHT, "Buddies3"); }
 
 void step() {
 
@@ -303,15 +284,9 @@ void step() {
         break;
       case SDL_SCANCODE_MINUS:
         if (e.keysym.mod & KMOD_SHIFT) {
-          for (int i = 0; i < 10 && num_foods != 1; i++) {
-            WorldHex *hex = hex_axial(foods[num_foods - 1].q, foods[num_foods - 1].r);
-            if (hex != 0) {
-              hex->food = 0;
-            }
-            --num_foods;
-          }
+          food_spawn_rate /= 2.0f;
         } else {
-          if (num_agents != 1) {
+          if (num_agents > 0) {
             deinit_agent(&agents[num_agents - 1]);
             --num_agents;
           }
@@ -319,9 +294,7 @@ void step() {
         break;
       case SDL_SCANCODE_EQUALS:
         if (e.keysym.mod & KMOD_SHIFT) {
-          for (int i = 0; i < 10 && num_foods < MAX_FOODS; i++) {
-            init_food(&foods[num_foods++]);
-          }
+          food_spawn_rate *= 2.0f;
         } else {
           if (num_agents < MAX_AGENTS) {
             init_agent(&agents[num_agents++]);
@@ -342,24 +315,15 @@ void step() {
 
   // respawn n % of out agents
   for (int i = 0; i < num_agents; i++) {
-    if (agents[i].out && fdis(gen) < 0.001f) {
+    if (agents[i].out && fdis(gen) < 0.01f) {
       init_agent(&agents[i]);
       agents[i].out = false;
     }
   }
 
-  // food index maps every agent to its nearest food
-  int food_index[num_agents];
-  for (int i = 0; i < num_agents; i++) {
-    int nearest_dist;
-    for (int j = 0; j < num_foods; j++) {
-      int dist =
-          axial_distance(agents[i].q, agents[i].r, foods[j].q, foods[j].r);
-      if (j == 0 || dist < nearest_dist) {
-        food_index[i] = j;
-        nearest_dist = dist;
-      }
-    }
+  // spawn food
+  if (fdis(gen) < food_spawn_rate) {
+    world[(int)(fdis(gen) * WORLD_SIZE)].food = true;
   }
 
   // map world state to the agent input model
@@ -368,15 +332,16 @@ void step() {
     if (agents[i].out) {
       continue;
     }
-    // float dx = foods[food_index[i]].body->GetPosition().x -
-    //            agents[i].body->GetPosition().x;
-    // float dy = foods[food_index[i]].body->GetPosition().y -
-    //            agents[i].body->GetPosition().y;
-    // agent_inputs[i].nearest_food_relative_direction =
-    //     angle_diff(atan2(dy, dx), agents[i].body->GetAngle());
-    agent_inputs[i].nearest_food_distance =
-        axial_distance(agents[i].q, agents[i].r, foods[food_index[i]].q,
-                       foods[food_index[i]].r);
+    int x, y, z;
+    axial_to_cubic(agents[i].q, agents[i].r, x, y, z);
+    for (int j = 0; j < 10; j++) {
+      agent_inputs[i].forward_food_distance = j;
+      WorldHex *hex = hex_cubic(x, y, z);
+      if (hex != 0 && hex->food) {
+        break;
+      }
+      cubic_add_direction(x, y, z, agents[i].orientation);
+    }
     agent_inputs[i].self_health = agents[i].health / MAX_HEALTH;
   }
 
@@ -399,8 +364,7 @@ void step() {
     }
 
     float ann_input[ANN_NUM_INPUT];
-    // ann_input[0] = agent_inputs[i].nearest_food_relative_direction;
-    ann_input[0] = agent_inputs[i].nearest_food_distance;
+    ann_input[0] = agent_inputs[i].forward_food_distance;
     ann_input[1] = agent_inputs[i].self_health;
 
     // // train via mouse
@@ -439,6 +403,7 @@ void step() {
       agents[i].orientation += 6;
     while (agents[i].orientation > 5)
       agents[i].orientation -= 6;
+    agents[i].health += (fabs(agent_behaviors[i].rotational) * -0.1f);
 
     // apply linear behavior
     hex_axial(agents[i].q, agents[i].r)->agent = 0;
@@ -452,6 +417,7 @@ void step() {
         x = x0;
         y = y0;
         z = z0;
+        agents[i].health += -1.0f;
       }
     }
     cubic_to_axial(x, y, z, agents[i].q, agents[i].r);
@@ -469,12 +435,10 @@ void step() {
     // eat near food
     if (agent_behaviors[i].eating) {
       WorldHex *hex = hex_axial(agents[i].q, agents[i].r);
-      if (hex != 0 && hex->food != 0) {
-        Food *food = hex->food;
-        hex->food = 0;
+      if (hex != 0 && hex->food) {
+        hex->food = false;
         agents[i].health = min(MAX_HEALTH, agents[i].health + FOOD_VALUE);
         agents[i].score++;
-        init_food(food);
       }
     }
 
@@ -510,7 +474,8 @@ void step() {
           agents[new_index].parent_index = i;
           agents[new_index].q = new_q;
           agents[new_index].r = new_r;
-          hex_axial(agents[new_index].q, agents[new_index].r)->agent = &agents[new_index];
+          hex_axial(agents[new_index].q, agents[new_index].r)->agent =
+              &agents[new_index];
           fann *source_ann = agents[i].ann;
           fann *target_ann = agents[new_index].ann;
           int num_conn = fann_get_total_connections(source_ann);
@@ -536,7 +501,7 @@ void step() {
   }
 
   // update the record model
-  if (frame % RECORD_SAMPLE_RATE == 0) {
+  if (frame % RECORD_SAMPLE_RATE == 0 && num_agents > 0) {
 
     int selected_index = 0;
 
@@ -592,17 +557,19 @@ void step() {
 
     if (draw_record % 3 == 0) {
 
-      if (camera % 3 == 0) {
+      if (camera % 4 == 0) {
         eg_translate(0, -HEX_SIZE * R * 0.5f);
         eg_scale(0.5f, 0.5f);
-      } else if (camera % 3 == 1) {
+      } else if (camera % 4 == 1) {
         eg_translate(0, -HEX_SIZE * R * 1.0f);
         eg_scale(1.0f, 1.0f);
-      } else if (camera % 3 == 2) {
+      } else if (camera % 4 == 2) {
         eg_translate(0, -HEX_SIZE * R * 2.0f);
         eg_scale(2.0f, 2.0f);
+      } else if (camera % 4 == 3) {
+        eg_translate(0, -HEX_SIZE * R * 0.25f);
+        eg_scale(0.25f, 0.25f);
       }
-
       for (int q = 0; q < Q; q++) {
         for (int r = 0; r < R; r++) {
           eg_push_transform();
@@ -620,6 +587,14 @@ void step() {
           glVertex2f(hex_x4, hex_y4);
           glVertex2f(hex_x5, hex_y5);
           glEnd();
+
+          // draw foods
+          if (hex_axial(q, r)->food) {
+            eg_scale(0.5f, 0.5f);
+            eg_set_color(0.1f, 0.9f, 0.1f, 1.0f);
+            eg_draw_square(-0.5f, -0.5, 1, 1);
+          }
+
           eg_pop_transform();
         }
       }
@@ -643,14 +618,6 @@ void step() {
         eg_draw_line(x, y, x + (float)cos(angle) * orientation_line_length,
                      y + (float)sin(angle) * orientation_line_length,
                      agents[i].parent_index == -1 ? 10.0f : 5.0f);
-
-        // indicate nearest food (by food index)
-        if (draw_extra_info) {
-          eg_set_color(0.5f, 0.2f, 0.2f, 1.0f);
-          int fx, fy;
-          axial_to_xy(foods[food_index[i]].q, foods[food_index[i]].r, fx, fy);
-          eg_draw_line(x, y, fx, fy, 2);
-        }
 
         // agent
         float buddy_size =
@@ -689,18 +656,6 @@ void step() {
           eg_draw_square(x - 0.5f * buddy_size, y - 0.5f * buddy_size,
                          buddy_size, buddy_size);
         }
-      }
-
-      // draw foods
-      for (int i = 0; i < num_foods; i++) {
-        int x, y;
-        axial_to_xy(foods[i].q, foods[i].r, x, y);
-        eg_push_transform();
-        eg_set_color(0.0f, 0.8f, 0.0f, 1.0f);
-        eg_translate(x, y);
-        eg_draw_square(-0.5f * FOOD_SIZE, -0.5 * FOOD_SIZE, FOOD_SIZE,
-                       FOOD_SIZE);
-        eg_pop_transform();
       }
     }
 
