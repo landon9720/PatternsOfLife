@@ -15,10 +15,10 @@ const int Q = 114;
 const int R = 80;
 const int WORLD_SIZE = Q * R;
 
-const int ANN_NUM_INPUT = 2;
+const int ANN_NUM_INPUT = 5;
 const int ANN_NUM_HIDDEN = 10;
 const int ANN_NUM_OUTPUT = 4;
-const int ANN_NUM_CONNECTIONS = 74; // how to calculate this? ¯\_(ツ)_/¯
+const int ANN_NUM_CONNECTIONS = 214; // how to calculate this? ¯\_(ツ)_/¯
 
 void cubic_to_axial(int x, int y, int z, int &q, int &r) {
   q = x;
@@ -101,46 +101,54 @@ int axial_distance(int q0, int r0, int q1, int r1) {
   return cubic_distance(x0, y0, z0, x1, y1, z1);
 }
 
-const int RECORD_SAMPLE_RATE = 100;
-const int TURBO_RATE = 300; // how many simulation steps per render
 const float AGENT_SIZE = 10.0f;
-const float FOOD_VALUE = 100.0f;
 const float EAT_DISTANCE = 16.0f;
-const float MAX_HEALTH = 100.0f;
-
+const float FOOD_VALUE = 100.0f;
+const float MAX_BEHAVIOR_POINTS = 100.0f;
+const float MAX_HEALTH_POINTS = 100.0f;
 const int MAX_AGENTS = 200;
+const int RECORD_SAMPLE_RATE = 100;
+const int TURBO_RATE = 300;
+const int FORWARD_FOOD_DISTANCE_SENSOR_LIMIT = 7;
+const int FORWARD_BLOCKED_DISTANCE_SENSOR_LIMIT = 7;
 
 static std::random_device rd;
 static std::mt19937 gen(rd());
 static std::uniform_real_distribution<float> fdis(0, 1);
 
 struct AgentInput {
+  float self_behavior_points;
+  float self_health_points;
+  int forward_blocked_distance;
   int forward_food_distance;
-  float self_health;
+  int time_of_day;
 };
 
 struct AgentBehavior {
-  int rotational; // rotational (twising and turning) behavior of the agent
-  int linear; // forward moving (in the direction of orientation) behavior of
-              // the agent
   bool eating;
   bool spawning;
+  int linear;
+  int rotational;
+  bool resting() {
+    return ! eating && ! spawning && linear == 0 && rotational == 0;
+  }
 };
 
 struct Agent {
-  int parent_index;
-  float health;
-  int score;
-  fann *ann;
-  int q, r, orientation;
-  float hue;
   bool out;
+  fann *ann;
+  float behavior_points;
+  float health_points;
+  float hue;
+  int parent_index;
+  int q, r, orientation;
+  int score;
 };
 
 struct Record {
+  float hues[MAX_AGENTS];
   float weights[ANN_NUM_CONNECTIONS];
   int scores[MAX_AGENTS];
-  float hues[MAX_AGENTS];
 };
 
 void deinit_agent(Agent *agent) {
@@ -163,7 +171,8 @@ void init_agent(Agent *agent) {
   // fann_set_learning_rate(agent->ann, 0.1f);
 
   agent->parent_index = -1;
-  agent->health = MAX_HEALTH;
+  agent->health_points = MAX_HEALTH_POINTS;
+  agent->behavior_points = MAX_BEHAVIOR_POINTS;
   agent->score = 0;
   agent->hue = fdis(gen);
   agent->out = false;
@@ -177,25 +186,21 @@ void init_agent(Agent *agent) {
   hex_axial(agent->q, agent->r)->agent = agent;
 }
 
-static int frame = 0;
-
 static Agent agents[MAX_AGENTS];
-
-static int num_agents = 0;
-static float food_spawn_rate = 0.001f;
-
 static AgentBehavior agent_behaviors[MAX_AGENTS];
-
-static Record records[WIDTH];
-static int records_index = 0;
-static int frame_rate = 1;
-static bool pause = false;
-static bool nudge = false;
-static int draw_record = 0;
-static bool draw_extra_info = false;
 static bool delete_agent = false;
-static int camera = 0;
+static bool draw_extra_info = false;
+static bool nudge = false;
+static bool pause = false;
 static bool quit = false;
+static float food_spawn_rate = 0.001f;
+static int camera = 0;
+static int draw_record = 0;
+static int frame = 0;
+static int frame_rate = 1;
+static int num_agents = 0;
+static int records_index = 0;
+static Record records[WIDTH];
 
 void unit_tests() {
   assert(0 == axial_distance(0, 0, 0, 0));
@@ -204,7 +209,8 @@ void unit_tests() {
   assert(1 == axial_distance(0, 0, 0, 1));
   assert(10 == axial_distance(0, 0, 10, 0));
 
-  fann *test_ann = fann_create_standard(3, ANN_NUM_INPUT, ANN_NUM_HIDDEN, ANN_NUM_OUTPUT);
+  fann *test_ann = fann_create_standard(4, ANN_NUM_INPUT, ANN_NUM_HIDDEN,
+                                        ANN_NUM_HIDDEN, ANN_NUM_OUTPUT);
   printf("actual number of connections: %d (ANN_NUM_CONNECTIONS=%d)\n",
          fann_get_total_connections(test_ann), ANN_NUM_CONNECTIONS);
   assert(fann_get_total_connections(test_ann) == ANN_NUM_CONNECTIONS);
@@ -217,6 +223,7 @@ void init() {
     agents[i].ann =
         fann_create_standard(3, ANN_NUM_INPUT, ANN_NUM_HIDDEN, ANN_NUM_OUTPUT);
   }
+  setlocale(LC_NUMERIC, "");
 }
 
 void step() {
@@ -281,20 +288,28 @@ void step() {
         break;
       case SDL_SCANCODE_MINUS:
         if (e.keysym.mod & KMOD_SHIFT) {
-          food_spawn_rate /= 2.0f;
+          if (food_spawn_rate > 0.00000001f) {
+            food_spawn_rate /= 2.0f;
+          }
+          printf("food_spawn_rate=%f\n", food_spawn_rate);
         } else {
           if (num_agents > 0) {
             deinit_agent(&agents[num_agents - 1]);
             --num_agents;
+            printf("num_agents=%d\n", num_agents);
           }
         }
         break;
       case SDL_SCANCODE_EQUALS:
         if (e.keysym.mod & KMOD_SHIFT) {
-          food_spawn_rate *= 2.0f;
+          if (food_spawn_rate < 1.0f) {
+            food_spawn_rate *= 2.0f;
+          }
+          printf("food_spawn_rate=%f\n", food_spawn_rate);
         } else {
           if (num_agents < MAX_AGENTS) {
             init_agent(&agents[num_agents++]);
+            printf("num_agents=%d\n", num_agents);
           }
         }
         break;
@@ -310,9 +325,9 @@ void step() {
     return;
   nudge = false;
 
-  // respawn n % of out agents
-  for (int i = 0; i < num_agents; i++) {
-    if (agents[i].out && fdis(gen) < 0.01f) {
+  // respawn agents 0-9
+  for (int i = 0; i < 10; i++) {
+    if (agents[i].out) {
       init_agent(&agents[i]);
       agents[i].out = false;
     }
@@ -323,6 +338,12 @@ void step() {
     world[(int)(fdis(gen) * WORLD_SIZE)].food = true;
   }
 
+  // day or night
+  const int DAY_LENGTH = 2000;
+  int time_of_day = frame % DAY_LENGTH;
+  bool day = (time_of_day < (DAY_LENGTH / 2));
+  float time_of_day_modifier = sinf(((float)time_of_day / (float)DAY_LENGTH) * 2.0f * M_PI);
+
   // map world state to the agent input model
   AgentInput agent_inputs[num_agents];
   for (int i = 0; i < num_agents; i++) {
@@ -331,7 +352,7 @@ void step() {
     }
     int x, y, z;
     axial_to_cubic(agents[i].q, agents[i].r, x, y, z);
-    for (int j = 0; j < 10; j++) {
+    for (int j = 0; j < FORWARD_FOOD_DISTANCE_SENSOR_LIMIT; j++) {
       agent_inputs[i].forward_food_distance = j;
       WorldHex *hex = hex_cubic(x, y, z);
       if (hex != 0 && hex->food) {
@@ -339,7 +360,18 @@ void step() {
       }
       cubic_add_direction(x, y, z, agents[i].orientation);
     }
-    agent_inputs[i].self_health = agents[i].health / MAX_HEALTH;
+    axial_to_cubic(agents[i].q, agents[i].r, x, y, z);
+    for (int j = 0; j < FORWARD_BLOCKED_DISTANCE_SENSOR_LIMIT; j++) {
+      agent_inputs[i].forward_blocked_distance = j;
+      WorldHex *hex = hex_cubic(x, y, z);
+      if (hex == 0 || hex->agent != 0 || hex->blocked) {
+        break;
+      }
+      cubic_add_direction(x, y, z, agents[i].orientation);
+    }
+    agent_inputs[i].self_health_points = agents[i].health_points;
+    agent_inputs[i].self_behavior_points = agents[i].behavior_points;
+    agent_inputs[i].time_of_day = time_of_day;
   }
 
   // index of high scoring agent
@@ -360,87 +392,17 @@ void step() {
       continue;
     }
 
-    float ann_input[ANN_NUM_INPUT];
-    ann_input[0] = agent_inputs[i].forward_food_distance;
-    ann_input[1] = agent_inputs[i].self_health;
-
-    // // train via mouse
-    // int mouse_x, mouse_y;
-    // SDL_PumpEvents();
-    // if (SDL_GetMouseState(&mouse_x, &mouse_y) & SDL_BUTTON(SDL_BUTTON_LEFT))
-    // {
-    //   float dx_to_mouse = (float)mouse_x - agents[i].body->GetPosition().x;
-    //   float dy_to_mouse =
-    //       ((float)HEIGHT - (float)mouse_y) - agents[i].body->GetPosition().y;
-    //   float fog_rotation = atan2(dy_to_mouse, dx_to_mouse);
-    //   float delta_radians =
-    //       angle_diff(fog_rotation, agents[i].body->GetAngle());
-    //   float distance =
-    //       sqrtf(dx_to_mouse * dx_to_mouse + dy_to_mouse * dy_to_mouse);
-    //   float fog_rotational_behavior = max(min(delta_radians, +1.0f), -1.0f);
-    //   float fog_linear_behavior = max(min(distance, +1.0f), -1.0f);
-    //   float ann_output_train[ANN_NUM_OUTPUT] = {fog_rotational_behavior,
-    //                                             fog_linear_behavior};
-    //   fann_train(agents[i].ann, ann_input, ann_output_train);
-    //   fog_flags[i] = true;
-    //   fog_behaviors[i].rotational = fog_rotational_behavior;
-    //   fog_behaviors[i].linear = fog_linear_behavior;
-    // }
-
-    // execute ann
-    float *ann_output = fann_run(agents[i].ann, ann_input);
-    agent_behaviors[i].rotational = (int)lroundf(ann_output[0] * 3.0f);
-    agent_behaviors[i].linear = (int)lroundf(ann_output[1] * 3.0f);
-    agent_behaviors[i].eating = ann_output[2] < 0.5f;
-    agent_behaviors[i].spawning = ann_output[3] < 0.5f;
-
-    // apply rotational behavior
-    agents[i].orientation += agent_behaviors[i].rotational;
-    while (agents[i].orientation < 0)
-      agents[i].orientation += 6;
-    while (agents[i].orientation > 5)
-      agents[i].orientation -= 6;
-    agents[i].health += (fabs(agent_behaviors[i].rotational) * -0.1f);
-
-    // apply linear behavior
-    hex_axial(agents[i].q, agents[i].r)->agent = 0;
-    int x, y, z;
-    axial_to_cubic(agents[i].q, agents[i].r, x, y, z);
-    for (int j = 0; j < agent_behaviors[i].linear; j++) {
-      int x0 = x, y0 = y, z0 = z;
-      cubic_add_direction(x0, y0, z0, agents[i].orientation);
-      WorldHex *hex = hex_cubic(x0, y0, z0);
-      if (hex != 0 && hex->agent == 0) {
-        x = x0;
-        y = y0;
-        z = z0;
-        agents[i].health += -1.0f;
-      }
-    }
-    cubic_to_axial(x, y, z, agents[i].q, agents[i].r);
-    hex_axial(agents[i].q, agents[i].r)->agent = &agents[i];
-
     // decay health as a function of time
-    agents[i].health += -0.1f;
+    agents[i].health_points += -0.1f;
 
     // handle d key flag
     if (delete_agent && i == high_score_index) {
       delete_agent = false;
-      agents[i].health = -1.0f;
-    }
-
-    // eat near food
-    if (agent_behaviors[i].eating) {
-      WorldHex *hex = hex_axial(agents[i].q, agents[i].r);
-      if (hex != 0 && hex->food) {
-        hex->food = false;
-        agents[i].health = min(MAX_HEALTH, agents[i].health + FOOD_VALUE);
-        agents[i].score++;
-      }
+      agents[i].health_points = -1.0f;
     }
 
     // death
-    if (agents[i].health <= 0.0f) {
+    if (agents[i].health_points <= 0.0f) {
       hex_axial(agents[i].q, agents[i].r)->agent = 0;
       for (int j = 0; j < num_agents; j++) {
         if (agents[j].parent_index == i) {
@@ -449,11 +411,75 @@ void step() {
       }
       agents[i].out = true;
       agents[i].score = 0;
+      continue;
+    }
+
+    float ann_input[ANN_NUM_INPUT];
+    ann_input[0] = (float)agent_inputs[i].forward_food_distance /
+                   (float)FORWARD_FOOD_DISTANCE_SENSOR_LIMIT;
+    ann_input[1] = (float)agent_inputs[i].forward_blocked_distance /
+                   (float)FORWARD_BLOCKED_DISTANCE_SENSOR_LIMIT;
+    ann_input[2] = agent_inputs[i].self_health_points / MAX_HEALTH_POINTS;
+    ann_input[3] = agent_inputs[i].self_behavior_points / MAX_BEHAVIOR_POINTS;
+    ann_input[4] = time_of_day_modifier;
+
+    // execute ann
+    float *ann_output = fann_run(agents[i].ann, ann_input);
+    agent_behaviors[i].rotational = (int)lroundf(ann_output[0]);
+    agent_behaviors[i].linear = (int)lroundf(fabs(ann_output[1]));
+    agent_behaviors[i].eating = fabs(ann_output[2]) > 0.5f;
+    agent_behaviors[i].spawning = fabs(ann_output[3]) > 0.5f;
+
+    if (agent_behaviors[i].resting()) {
+      agents[i].behavior_points =
+          min(agents[i].behavior_points + 1.0f, MAX_BEHAVIOR_POINTS);
+      continue;
+    }
+
+    // apply rotational behavior
+    if (fabs(agent_behaviors[i].rotational) < agents[i].behavior_points) {
+      agents[i].orientation += agent_behaviors[i].rotational;
+      while (agents[i].orientation < 0)
+        agents[i].orientation += 6;
+      while (agents[i].orientation > 5)
+        agents[i].orientation -= 6;
+      agents[i].behavior_points -= fabs(agent_behaviors[i].rotational);
+    }
+
+    // apply linear behavior
+    hex_axial(agents[i].q, agents[i].r)->agent = 0;
+    int x, y, z;
+    axial_to_cubic(agents[i].q, agents[i].r, x, y, z);
+    for (int j = 0;
+         j < agent_behaviors[i].linear && agents[i].behavior_points > 0.0f;
+         j++) {
+      int x0 = x, y0 = y, z0 = z;
+      cubic_add_direction(x0, y0, z0, agents[i].orientation);
+      WorldHex *hex = hex_cubic(x0, y0, z0);
+      if (hex != 0 && hex->agent == 0) {
+        x = x0;
+        y = y0;
+        z = z0;
+      }
+      agents[i].behavior_points -= 1.0f;
+    }
+    cubic_to_axial(x, y, z, agents[i].q, agents[i].r);
+    hex_axial(agents[i].q, agents[i].r)->agent = &agents[i];
+
+    // eat near food
+    if (agent_behaviors[i].eating && agents[i].behavior_points > 1.0f) {
+      WorldHex *hex = hex_axial(agents[i].q, agents[i].r);
+      if (hex != 0 && hex->food) {
+        hex->food = false;
+        agents[i].health_points = min(MAX_HEALTH_POINTS, agents[i].health_points + FOOD_VALUE);
+        agents[i].score++;
+        agents[i].behavior_points -= 1.0f;
+      }
     }
 
     // spawning
-    if (!agents[i].out && agent_behaviors[i].spawning &&
-        agents[i].health > MAX_HEALTH * 0.9f) {
+    if (agents[i].parent_index == -1 && !agents[i].out && agents[i].behavior_points > 50.0f &&
+        agent_behaviors[i].spawning) {
       int new_index = 0;
       while (new_index < num_agents && !agents[new_index].out) {
         new_index++;
@@ -490,8 +516,9 @@ void step() {
           }
           fann_set_weight_array(target_ann, target_connections, num_conn);
           agents[new_index].hue = agents[i].hue;
-          // share remaining health
-          agents[new_index].health = agents[i].health = agents[i].health / 2.0f;
+          agents[i].behavior_points -= 50.0f;
+          agents[new_index].behavior_points = 25.0f;
+          agents[new_index].health_points = 25.0f;
         }
       }
     }
@@ -574,7 +601,7 @@ void step() {
           axial_to_xy(q, r, x, y);
           eg_translate(x, y);
           eg_scale(HEX_SIZE, HEX_SIZE);
-          eg_set_color(0.3f, 0.3f, 0.3f, 1.0f);
+          eg_set_color(0.2f, 0.2f, 0.2f, 1.0f);
           glLineWidth(1);
           glBegin(GL_LINE_LOOP);
           glVertex2f(hex_x0, hex_y0);
@@ -617,42 +644,66 @@ void step() {
                      agents[i].parent_index == -1 ? 10.0f : 5.0f);
 
         // agent
+        eg_push_transform();
+        eg_translate(x, y);
+        eg_rotate((agents[i].orientation / 6.0f) * 360.0f + (360 / 12));
         float buddy_size =
             AGENT_SIZE * (agents[i].parent_index == -1 ? 1.0f : 0.6f);
+        eg_scale(buddy_size, buddy_size);
         eg_set_color(0.9f, 0.9f, 0.9f, 1.0f);
-        eg_draw_square(x - 0.5f * buddy_size, y - 0.5f * buddy_size, buddy_size,
-                       buddy_size);
+        eg_draw_square(-0.5f, -0.5f, 1.0f, 1.0f);
+        eg_scale(0.5f, 0.5f);
         eg_set_color(0.0f, 0.0f, 0.0f, 1.0f);
-        eg_draw_square(x - 0.5f * buddy_size * 0.5f,
-                       y - 0.5f * buddy_size * 0.5f, buddy_size * 0.5f,
-                       buddy_size * 0.5f);
+        eg_draw_square(-0.5f, -0.5f, 1.0f, 1.0f);
+        if (i == high_score_index) {
+          eg_set_color(1.0f, 0.2f, 0.2f, 1.0f);
+          eg_draw_square(-0.5f, -0.5f, 1.0f, 1.0f);
+        }
+        eg_pop_transform();
 
         if (draw_extra_info) {
           // health bar
           eg_set_color(0.2f, 0.2f, 0.2f, 0.7f);
           eg_draw_square(x - 15.0f, y + 12.0f, 30.0f, 5.0f);
-          if (agents[i].health > MAX_HEALTH * 0.25f) {
+          if (agents[i].health_points > MAX_HEALTH_POINTS * 0.25f) {
             eg_set_color(0.5f, 0.9f, 0.5f, 0.8f);
           } else {
             eg_set_color(0.8f, 0.3f, 0.3f, 0.8f);
           }
           eg_draw_square(x - 15.0f, y + 12.0f,
-                         agents[i].health * 30.0f / MAX_HEALTH, 5.0f);
+                         agents[i].health_points * 30.0f / MAX_HEALTH_POINTS, 5.0f);
+
+          // behavior points bar
+          eg_set_color(0.2f, 0.2f, 0.2f, 0.7f);
+          eg_draw_square(x - 15.0f, y + 20.0f, 30.0f, 5.0f);
+          eg_set_color(0.10f, 0.10f, 0.9f,
+                       agent_behaviors[i].resting() ? 1.0f : 0.7f);
+          eg_draw_square(
+              x - 15.0f, y + 20.0f,
+              30.0f * (agents[i].behavior_points / MAX_BEHAVIOR_POINTS), 5.0f);
 
           // score bar
           eg_set_color(0.2f, 0.2f, 0.2f, 0.7f);
-          eg_draw_square(x - 15.0f, y + 20.0f, 30.0f, 5.0f);
+          eg_draw_square(x - 15.0f, y + 28.0f, 30.0f, 5.0f);
           eg_set_color(0.9f, 0.85f, 0.0f, 0.8f);
-          eg_draw_square(x - 15.0f, y + 20.0f,
+          eg_draw_square(x - 15.0f, y + 28.0f,
                          30.0f * ((float)agents[i].score /
                                   (float)agents[high_score_index].score),
                          5.0f);
         }
-        if (i == high_score_index) {
-          eg_set_color(0.9f, 0.3f, 0.3f, 1.0f);
-          eg_draw_square(x - 0.5f * buddy_size, y - 0.5f * buddy_size,
-                         buddy_size, buddy_size);
+      }
+
+      // draw day or night cast
+      if (frame_rate == 1) {
+        eg_push_transform();
+        eg_reset_transform();
+        if (day) {
+          eg_set_color(1.0f, 1.0f, 0.0f, 0.1f * fabs(time_of_day_modifier));
+        } else {
+          eg_set_color(0.0f, 0.0f, 1.0f, 0.1f * fabs(time_of_day_modifier));
         }
+        eg_draw_square(0, 0, WIDTH, HEIGHT);
+        eg_pop_transform();
       }
     }
 
@@ -667,7 +718,7 @@ void step() {
         }
         for (int wi = 0; wi < ANN_NUM_CONNECTIONS; wi++) {
           float r, g, b;
-          float hue = (float)wi / (float)ANN_NUM_CONNECTIONS * 7.0f;
+          float hue = (float)wi / (float)ANN_NUM_CONNECTIONS * 13.0f;
           while (hue > 1.0f)
             hue -= 1.0f;
           hsv_to_rgb(hue, 0.90f, 1.00f, &r, &g, &b);
@@ -711,7 +762,7 @@ int main(int argc, char *argv[]) {
   }
 #endif
 
-  printf("%d\n", frame);
+  printf("%'d\n", frame);
 
   eg_shutdown();
 

@@ -15,3 +15,5 @@
 
 using std::min;
 using std::max;
+
+#include <locale.h>
