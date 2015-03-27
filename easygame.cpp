@@ -21,9 +21,8 @@ void eg_init(int width, int height, const std::string &title) {
       title.c_str(),
       SDL_WINDOWPOS_UNDEFINED,
       SDL_WINDOWPOS_UNDEFINED,
-      // width, height,
-      2880,1800,
-      SDL_WINDOW_OPENGL|SDL_WINDOW_ALLOW_HIGHDPI|SDL_WINDOW_FULLSCREEN_DESKTOP);
+      width, height,
+      SDL_WINDOW_OPENGL|SDL_WINDOW_ALLOW_HIGHDPI);//|SDL_WINDOW_FULLSCREEN_DESKTOP);
 
   SDL_SetWindowFullscreen(window, 0);
   SDL_GL_CreateContext(window);

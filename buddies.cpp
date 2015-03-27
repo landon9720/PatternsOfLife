@@ -130,7 +130,7 @@ struct AgentBehavior {
   int linear;
   int rotational;
   bool resting() {
-    return ! eating && ! spawning && linear == 0 && rotational == 0;
+    return !eating && !spawning && linear == 0 && rotational == 0;
   }
 };
 
@@ -188,19 +188,26 @@ void init_agent(Agent *agent) {
 
 static Agent agents[MAX_AGENTS];
 static AgentBehavior agent_behaviors[MAX_AGENTS];
+static Record records[WIDTH];
 static bool delete_agent = false;
 static bool draw_extra_info = false;
+static bool moving = false;
 static bool nudge = false;
 static bool pause = false;
 static bool quit = false;
+static bool zooming = false;
+static float camera_x = HEX_SIZE * R;
+static float camera_y = HEX_SIZE * Q;
+static float camera_zoom = 0.5f;
 static float food_spawn_rate = 0.001f;
-static int camera = 0;
 static int draw_record = 0;
 static int frame = 0;
 static int frame_rate = 1;
+static int moving_home_x;
+static int moving_home_y;
 static int num_agents = 0;
 static int records_index = 0;
-static Record records[WIDTH];
+static int zooming_home;
 
 void unit_tests() {
   assert(0 == axial_distance(0, 0, 0, 0));
@@ -211,6 +218,7 @@ void unit_tests() {
 
   fann *test_ann = fann_create_standard(4, ANN_NUM_INPUT, ANN_NUM_HIDDEN,
                                         ANN_NUM_HIDDEN, ANN_NUM_OUTPUT);
+  fann_print_parameters(test_ann);
   printf("actual number of connections: %d (ANN_NUM_CONNECTIONS=%d)\n",
          fann_get_total_connections(test_ann), ANN_NUM_CONNECTIONS);
   assert(fann_get_total_connections(test_ann) == ANN_NUM_CONNECTIONS);
@@ -283,8 +291,22 @@ void step() {
       case SDL_SCANCODE_D:
         delete_agent = true;
         break;
+      case SDL_SCANCODE_SPACE:
+        if (e.repeat == 0) {
+          int mouse_x, mouse_y;
+          SDL_GetMouseState(&mouse_x, &mouse_y);
+          moving_home_x = mouse_x;
+          moving_home_y = HEIGHT - mouse_y;
+          moving = true;
+        }
+        break;
       case SDL_SCANCODE_Z:
-        camera++;
+        if (e.repeat == 0) {
+          int mouse_x, mouse_y;
+          SDL_GetMouseState(&mouse_x, &mouse_y);
+          zooming_home = HEIGHT - mouse_y;
+          zooming = true;
+        }
         break;
       case SDL_SCANCODE_MINUS:
         if (e.keysym.mod & KMOD_SHIFT) {
@@ -318,6 +340,19 @@ void step() {
       }
       break;
     }
+    case SDL_KEYUP: {
+      SDL_KeyboardEvent e = event.key;
+      switch (e.keysym.scancode) {
+      case SDL_SCANCODE_SPACE:
+        moving = false;
+        break;
+      case SDL_SCANCODE_Z:
+        zooming = false;
+        break;
+      default:
+        break;
+      }
+    } break;
     }
   }
 
@@ -342,7 +377,8 @@ void step() {
   const int DAY_LENGTH = 2000;
   int time_of_day = frame % DAY_LENGTH;
   bool day = (time_of_day < (DAY_LENGTH / 2));
-  float time_of_day_modifier = sinf(((float)time_of_day / (float)DAY_LENGTH) * 2.0f * M_PI);
+  float time_of_day_modifier =
+      sinf(((float)time_of_day / (float)DAY_LENGTH) * 2.0f * M_PI);
 
   // map world state to the agent input model
   AgentInput agent_inputs[num_agents];
@@ -471,15 +507,17 @@ void step() {
       WorldHex *hex = hex_axial(agents[i].q, agents[i].r);
       if (hex != 0 && hex->food) {
         hex->food = false;
-        agents[i].health_points = min(MAX_HEALTH_POINTS, agents[i].health_points + FOOD_VALUE);
+        agents[i].health_points =
+            min(MAX_HEALTH_POINTS, agents[i].health_points + FOOD_VALUE);
         agents[i].score++;
         agents[i].behavior_points -= 1.0f;
       }
     }
 
     // spawning
-    if (agents[i].parent_index == -1 && !agents[i].out && agents[i].behavior_points > 50.0f &&
-        agent_behaviors[i].spawning) {
+    if (agent_behaviors[i].spawning && agents[i].parent_index == -1 &&
+        !agents[i].out && agents[i].behavior_points > 50.0f &&
+        agents[i].health_points > 50.0f) {
       int new_index = 0;
       while (new_index < num_agents && !agents[new_index].out) {
         new_index++;
@@ -516,9 +554,10 @@ void step() {
           }
           fann_set_weight_array(target_ann, target_connections, num_conn);
           agents[new_index].hue = agents[i].hue;
-          agents[i].behavior_points -= 50.0f;
-          agents[new_index].behavior_points = 25.0f;
-          agents[new_index].health_points = 25.0f;
+          agents[i].behavior_points = agents[new_index].behavior_points =
+              agents[i].behavior_points / 2.0f;
+          agents[i].health_points = agents[new_index].health_points =
+              agents[i].health_points / 2.0f;
         }
       }
     }
@@ -561,6 +600,10 @@ void step() {
     records_index %= WIDTH;
   }
 
+  // display
+  //
+  //
+  //
   if (frame % frame_rate == 0) {
 
     eg_clear_screen(0.0f, 0.0f, 0.0f, 0.0f);
@@ -581,19 +624,29 @@ void step() {
 
     if (draw_record % 3 == 0) {
 
-      if (camera % 4 == 0) {
-        eg_translate(0, -HEX_SIZE * R * 0.5f);
-        eg_scale(0.5f, 0.5f);
-      } else if (camera % 4 == 1) {
-        eg_translate(0, -HEX_SIZE * R * 1.0f);
-        eg_scale(1.0f, 1.0f);
-      } else if (camera % 4 == 2) {
-        eg_translate(0, -HEX_SIZE * R * 2.0f);
-        eg_scale(2.0f, 2.0f);
-      } else if (camera % 4 == 3) {
-        eg_translate(0, -HEX_SIZE * R * 0.25f);
-        eg_scale(0.25f, 0.25f);
+      if (moving) {
+        int mouse_x, mouse_y;
+        SDL_GetMouseState(&mouse_x, &mouse_y);
+        mouse_y = HEIGHT - mouse_y;
+        camera_x -= (float)(mouse_x - moving_home_x) * (1.0f / camera_zoom);
+        camera_y -= (float)(mouse_y - moving_home_y) * (1.0f / camera_zoom);
+        moving_home_x = mouse_x;
+        moving_home_y = mouse_y;
       }
+
+      if (zooming) {
+        int mouse_x, mouse_y;
+        SDL_GetMouseState(&mouse_x, &mouse_y);
+        mouse_y = HEIGHT - mouse_y;
+        camera_zoom += (float)(mouse_y - zooming_home) * 0.003f;
+        zooming_home = mouse_y;
+      }
+
+      eg_scale(camera_zoom, camera_zoom);
+      eg_translate(-camera_x, -camera_y);
+      eg_translate((float)(WIDTH / 2) / camera_zoom,
+                   (float)(HEIGHT / 2) / camera_zoom);
+
       for (int q = 0; q < Q; q++) {
         for (int r = 0; r < R; r++) {
           eg_push_transform();
@@ -671,7 +724,8 @@ void step() {
             eg_set_color(0.8f, 0.3f, 0.3f, 0.8f);
           }
           eg_draw_square(x - 15.0f, y + 12.0f,
-                         agents[i].health_points * 30.0f / MAX_HEALTH_POINTS, 5.0f);
+                         agents[i].health_points * 30.0f / MAX_HEALTH_POINTS,
+                         5.0f);
 
           // behavior points bar
           eg_set_color(0.2f, 0.2f, 0.2f, 0.7f);
