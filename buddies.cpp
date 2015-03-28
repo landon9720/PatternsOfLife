@@ -11,8 +11,8 @@ struct WorldHex {
 const int HEX_SIZE = 15;
 const int WIDTH = 1280;
 const int HEIGHT = 720;
-const int Q = 114;
-const int R = 80;
+const int Q = 200;
+const int R = 123;
 const int WORLD_SIZE = Q * R;
 
 const int ANN_NUM_INPUT = 5;
@@ -165,8 +165,8 @@ void init_agent(Agent *agent) {
   fann_randomize_weights(agent->ann, -1.0f, 1.0f);
   fann_set_activation_function_hidden(agent->ann, FANN_SIGMOID_SYMMETRIC);
   fann_set_activation_function_output(agent->ann, FANN_SIGMOID_SYMMETRIC);
-  fann_set_activation_steepness_hidden(agent->ann, 0.50f);
-  fann_set_activation_steepness_output(agent->ann, 0.50f);
+  fann_set_activation_steepness_hidden(agent->ann, 0.65f);
+  fann_set_activation_steepness_output(agent->ann, 0.65f);
   // fann_set_training_algorithm(agent->ann, FANN_TRAIN_INCREMENTAL);
   // fann_set_learning_rate(agent->ann, 0.1f);
 
@@ -467,8 +467,9 @@ void step() {
     agent_behaviors[i].spawning = fabs(ann_output[3]) > 0.5f;
 
     if (agent_behaviors[i].resting()) {
+      float gain = 1.0f + -time_of_day_modifier;
       agents[i].behavior_points =
-          min(agents[i].behavior_points + 1.0f, MAX_BEHAVIOR_POINTS);
+          min(agents[i].behavior_points + gain, MAX_BEHAVIOR_POINTS);
       continue;
     }
 
@@ -604,7 +605,8 @@ void step() {
   //
   //
   //
-  if (frame % frame_rate == 0) {
+  if (frame % frame_rate == 0 ||
+    moving || zooming) {
 
     eg_clear_screen(0.0f, 0.0f, 0.0f, 0.0f);
     eg_reset_transform();
@@ -816,7 +818,7 @@ int main(int argc, char *argv[]) {
   }
 #endif
 
-  printf("%'d\n", frame);
+  printf("frames=%'d\ndays=%'d\nyears=%'d\n", frame, frame / 1000, frame / 1000 / 365);
 
   eg_shutdown();
 
