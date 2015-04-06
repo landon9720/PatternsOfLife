@@ -12,6 +12,7 @@ typedef SDL_Event EGEvent;
 
 bool eg_poll_event(EGEvent *ev);
 bool eg_get_keystate(int scancode);
+void warp_mouse(int x, int y);
 
 // graphics
 void eg_swap_buffers();

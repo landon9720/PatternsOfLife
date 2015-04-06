@@ -22,7 +22,7 @@ void eg_init(int width, int height, const std::string &title) {
       SDL_WINDOWPOS_UNDEFINED,
       SDL_WINDOWPOS_UNDEFINED,
       width, height,
-      SDL_WINDOW_OPENGL|SDL_WINDOW_ALLOW_HIGHDPI|SDL_WINDOW_FULLSCREEN_DESKTOP);
+      SDL_WINDOW_OPENGL|SDL_WINDOW_ALLOW_HIGHDPI);//|SDL_WINDOW_FULLSCREEN_DESKTOP);
 
   SDL_SetWindowFullscreen(window, 0);
   SDL_GL_CreateContext(window);
@@ -52,6 +52,10 @@ bool eg_poll_event(EGEvent *ev) {
 
 bool eg_get_keystate(int scancode) {
   return keystate[scancode];
+}
+
+void warp_mouse(int x, int y) {
+  SDL_WarpMouseInWindow(window, x, y);
 }
 
 void eg_push_transform() {
@@ -191,6 +195,9 @@ float angle_diff(float a, float b) {
 
 // from http://martin.ankerl.com/2009/12/09/how-to-create-random-colors-programmatically/
 void hsv_to_rgb(float h, float s, float v, float *r, float *g, float *b) {
+  assert(h >= 0.0f && h <= 1.0f);
+  assert(s >= 0.0f && s <= 1.0f);
+  assert(v >= 0.0f && v <= 1.0f);
   int h_i = h * 6;
   float f = h * 6 - h_i;
   float p = v * (1 - s);
