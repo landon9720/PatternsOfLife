@@ -24,7 +24,8 @@ void eg_init(int width, int height, const std::string &title) {
       width, height,
       SDL_WINDOW_OPENGL|SDL_WINDOW_ALLOW_HIGHDPI);//|SDL_WINDOW_FULLSCREEN_DESKTOP);
 
-  SDL_SetWindowFullscreen(window, 0);
+  SDL_GL_SetAttribute(SDL_GL_MULTISAMPLEBUFFERS, 1);
+  SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, 4);
   SDL_GL_CreateContext(window);
 
   keystate = SDL_GetKeyboardState(nullptr);

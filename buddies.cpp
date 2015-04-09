@@ -15,19 +15,20 @@ public:
 struct WorldHex {
   bool food;
   Agent *agent;
+  float alt;
 };
 
 const int HEX_SIZE = 15;
 const int WIDTH = 1280;
 const int HEIGHT = 720;
-const int Q = 200 * 2;
-const int R = 123 * 2;
+const int Q = 400;
+const int R = 400;
 const int WORLD_SIZE = Q * R;
 
-const int ANN_NUM_INPUT = 10;
+const int ANN_NUM_INPUT = 11;
 const int ANN_NUM_HIDDEN = 7;
 const int ANN_NUM_OUTPUT = 4;
-const int ANN_NUM_CONNECTIONS = 165; // how to calculate this? ¯\_(ツ)_/¯
+const int ANN_NUM_CONNECTIONS = 172; // how to calculate this? ¯\_(ツ)_/¯
 
 const int DNA_SIZE = ANN_NUM_CONNECTIONS + 5;
 
@@ -40,7 +41,7 @@ static bool zooming = false;
 static float camera_x = HEX_SIZE * R;
 static float camera_y = HEX_SIZE * Q;
 static float camera_zoom = 0.5f;
-static float food_spawn_rate = 0.001f;
+static float food_spawn_rate = 0.304482f;
 static float time_of_day_modifier = 0.0f;
 static int draw_record = 0;
 static int following = -1;
@@ -48,7 +49,7 @@ static int frame = 0;
 static int frame_rate = 1;
 static int moving_home_x;
 static int moving_home_y;
-static int num_agents = 20;
+static int num_agents = 50;
 static int records_index = 0;
 static int time_of_day = 0;
 static int zooming_home;
@@ -144,7 +145,7 @@ int axial_distance(int q0, int r0, int q1, int r1) {
   return cubic_distance(x0, y0, z0, x1, y1, z1);
 }
 
-const float AGENT_SIZE = 10.0f;
+const float AGENT_SIZE = 20.0f;
 const float EAT_DISTANCE = 16.0f;
 const float FOOD_VALUE = 100.0f;
 const float MAX_BEHAVIOR_POINTS = 100.0f;
@@ -152,7 +153,7 @@ const float MAX_HEALTH_POINTS = 100.0f;
 const int DAY_LENGTH = 2000;
 const int FORWARD_BLOCKED_DISTANCE_SENSOR_LIMIT = 7;
 const int FORWARD_FOOD_DISTANCE_SENSOR_LIMIT = 7;
-const int MAX_AGENTS = 200;
+const int MAX_AGENTS = 1000;
 const int RECORD_SAMPLE_RATE = 100;
 const int RESERVED_AGENT_COUNT = 10;
 const int TURBO_RATE = 300;
@@ -302,6 +303,7 @@ static Record records[WIDTH];
 static const int NONE_MARK = 0;
 static const int DEATH_MARK = 1;
 static const int BIRTH_MARK = 2;
+static const int EAT_MARK = 3;
 
 struct Mark {
   int type;
@@ -377,6 +379,13 @@ public:
   virtual float sense(const Agent &agent) { return time_of_day_modifier; }
 };
 
+class AltSensor : public Sensor {
+public:
+  virtual float sense(const Agent &agent) {
+    return hex_axial(agent.q, agent.r)->alt;
+  }
+};
+
 class RotationalBehavior : public Behavior {
 public:
   virtual bool behave(Agent &agent, float perceptron_output) {
@@ -400,7 +409,15 @@ public:
     hex_axial(agent.q, agent.r)->agent = 0;
     int x, y, z;
     axial_to_cubic(agent.q, agent.r, x, y, z);
-    for (int j = 0; j < linear && agent.behavior_points > 1.0f; j++) {
+    for (int j = 0; j < linear; j++) {
+      float alt = hex_cubic(x, y, z)->alt;
+      float cost = 2.0f;
+      if (alt > 0.5f) {
+        cost += alt * 50.0f;
+      }
+      if (agent.behavior_points < cost) {
+        break;
+      }
       int x0 = x, y0 = y, z0 = z;
       cubic_add_direction(x0, y0, z0, agent.orientation);
       WorldHex *hex = hex_cubic(x0, y0, z0);
@@ -408,8 +425,8 @@ public:
         x = x0;
         y = y0;
         z = z0;
+        agent.behavior_points -= cost;
       }
-      agent.behavior_points -= 1.0f;
     }
     cubic_to_axial(x, y, z, agent.q, agent.r);
     hex_axial(agent.q, agent.r)->agent = &agent;
@@ -423,14 +440,16 @@ public:
     bool eating = fabs(perceptron_output) > 0.5f;
     if (!eating)
       return false;
-    if (eating && agent.behavior_points > 1.0f) {
+    float cost = 10.0f;//fabs((MAX_HEALTH_POINTS - agent.health_points) - FOOD_VALUE);
+    if (eating && agent.behavior_points > cost) {
       WorldHex *hex = hex_axial(agent.q, agent.r);
       if (hex != 0 && hex->food) {
         hex->food = false;
         agent.health_points =
             min(MAX_HEALTH_POINTS, agent.health_points + FOOD_VALUE);
         agent.score++;
-        agent.behavior_points -= 1.0f;
+        agent.behavior_points -= cost;
+        add_mark((struct Mark){EAT_MARK, agent.q, agent.r, frame});
       }
     }
     return true;
@@ -486,6 +505,7 @@ ForwardBlockedSensor forwardBlockedSensor;
 SelfHealthPointsSensor selfHealthPointsSensor;
 SelfBehaviorPointsSensor selfBehaviorPointsSensor;
 TimeOfDaySensor timeOfDaySensor;
+AltSensor altSensor;
 
 RotationalBehavior rotationalBehavior;
 LinearBehavior linearBehavior;
@@ -511,6 +531,36 @@ void unit_tests() {
 void init() {
   eg_init(WIDTH, HEIGHT, "Patterns of Life");
   setlocale(LC_NUMERIC, "");
+
+  PerlinNoise noise;
+
+  for (int q = 0; q < Q; q++) {
+    for (int r = 0; r < R; r++) {
+      int x, y;
+      axial_to_xy(q, r, x, y);
+      hex_axial(q, r)->alt = noise.noise(x * 0.0005, y * 0.0005, 0);
+    }
+  }
+
+  float min_alt = 1.0f;
+  float max_alt = 0.0f;
+  for (int q = 0; q < Q; q++) {
+    for (int r = 0; r < R; r++) {
+      float alt = hex_axial(q, r)->alt;
+      if (alt < min_alt)
+        min_alt = alt;
+      if (alt > max_alt)
+        max_alt = alt;
+    }
+  }
+
+  for (int q = 0; q < Q; q++) {
+    for (int r = 0; r < R; r++) {
+      float alt = hex_axial(q, r)->alt;
+      alt = (alt - min_alt) / (max_alt - min_alt);
+      hex_axial(q, r)->alt = alt;
+    }
+  }
 }
 
 void step() {
@@ -714,6 +764,7 @@ void step() {
     ann_input[7] = selfHealthPointsSensor.sense(agent);
     ann_input[8] = selfBehaviorPointsSensor.sense(agent);
     ann_input[9] = timeOfDaySensor.sense(agent);
+    ann_input[10] = altSensor.sense(agent);
 
     // execute ann
     float *ann_output = fann_run(agent.ann, ann_input);
@@ -743,7 +794,7 @@ void step() {
     // }
   }
 
-  // update the record model
+  // update record model
   if (frame % RECORD_SAMPLE_RATE == 0 && num_agents > 0) {
 
     int selected_index = Agent::select();
@@ -826,20 +877,31 @@ void step() {
       glVertex2f(border_x3, border_y3);
       glEnd();
 
-      // draw foods
       for (int q = 0; q < Q; q++) {
         for (int r = 0; r < R; r++) {
-          if (hex_axial(q, r)->food) {
-            eg_push_transform();
-            int x, y;
-            axial_to_xy(q, r, x, y);
-            eg_translate(x, y);
-            eg_scale(HEX_SIZE, HEX_SIZE);
+          WorldHex *hex = hex_axial(q, r);
+
+          eg_push_transform();
+          int x, y;
+          axial_to_xy(q, r, x, y);
+          eg_translate(x, y);
+          eg_scale(HEX_SIZE, HEX_SIZE);
+
+          // draw altitude
+          if (hex->alt > 0.5)
+            eg_set_color(2 / 3.0, 1 / 3.0, 1 / 30.0, hex->alt);
+          else
+            eg_set_color(1 / 3.0, 1 / 3.0, 30 / 30.0, hex->alt);
+          eg_draw_square(-0.7f, -0.7, 1.4, 1.4);
+
+          // draw foods
+          if (hex->food) {
             eg_scale(0.5f, 0.5f);
-            eg_set_color(0.1f, 0.9f, 0.1f, 1.0f);
+            eg_set_color(0.05f, 0.8f, 0.05f, 1.0f);
             eg_draw_square(-0.5f, -0.5, 1, 1);
-            eg_pop_transform();
           }
+
+          eg_pop_transform();
         }
       }
 
@@ -859,7 +921,7 @@ void step() {
         hsv_to_rgb(agent.hue, 1.0f, 1.0f, &r, &g, &b);
         eg_set_color(r, g, b, 1.0f);
         float angle = agent.orientation / 6.0f * 2 * M_PI + (M_PI / 6.0f);
-        float orientation_line_length = 15.0;
+        float orientation_line_length = 20.0;
         // agent_behaviors[i].give_take != 0 ? 30.0f : 10.0f;
         eg_draw_line(x, y, x + (float)cos(angle) * orientation_line_length,
                      y + (float)sin(angle) * orientation_line_length,
@@ -958,6 +1020,18 @@ void step() {
             eg_pop_transform();
           }
           break;
+        case EAT_MARK:
+          if (age < 100) {
+            eg_push_transform();
+            int x, y;
+            axial_to_xy(mark.q, mark.r, x, y);
+            eg_translate(x, y);
+            eg_set_color(0.10f, 0.7f, 0.05f, 1.0f);
+            eg_rotate((age / 100.0f) * (4 * 360));
+            eg_draw_square(-4, -4, 8, 8);
+            eg_pop_transform();
+          }
+          break;
         default:
           assert(false);
         }
@@ -1002,11 +1076,11 @@ void step() {
 
     // population graph
     if (draw_record % 4 == 3) {
-      float h = (float)HEIGHT / (float)MAX_AGENTS;
+      float h = (float)HEIGHT / (float)num_agents;
       for (int rx = 0; rx < WIDTH; rx++) {
         const Record &record = records[(records_index + rx) % WIDTH];
         float y = 0;
-        for (int i = 0; i < MAX_AGENTS; ++i) {
+        for (int i = 0; i < num_agents; ++i) {
           float r, g, b;
           hsv_to_rgb(record.hues[i], 1.00f, record.outs[i] ? 0.5f : 1.0f, &r,
                      &g, &b);

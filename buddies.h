@@ -24,3 +24,5 @@ using std::max;
 
 #include <limits>
 #include <cfloat>
+
+#include "PerlinNoise.h"
