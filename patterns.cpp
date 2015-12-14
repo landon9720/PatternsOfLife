@@ -487,60 +487,6 @@ LinearBehavior linearBehavior;
 EatingBehavior eatingBehavior;
 SpawningBehavior spawningBehavior;
 
-void unit_tests() {
-
-  int x = 0, y = 0, z = 0, q = 0, r = 0;
-  assert(x == 0 && y == 0 && z == 0 && q == 0 && r == 0);
-  cubic_to_axial(x, y, z, q, r);
-  assert(x == 0 && y == 0 && z == 0 && q == 0 && r == 0);
-  
-  cubic_add_direction(x, y, z, 0);
-  cubic_add_direction(x, y, z, 3);
-  assert(x == 0 && y == 0 && z == 0 && q == 0 && r == 0);
-  
-  cubic_add_direction(x, y, z, 1);
-  cubic_add_direction(x, y, z, 4);
-  assert(x == 0 && y == 0 && z == 0 && q == 0 && r == 0);
-  
-  cubic_add_direction(x, y, z, 2);
-  cubic_add_direction(x, y, z, 5);
-  assert(x == 0 && y == 0 && z == 0 && q == 0 && r == 0);
-  
-  cubic_add_direction(x, y, z, 3);
-  cubic_add_direction(x, y, z, 0);
-  assert(x == 0 && y == 0 && z == 0 && q == 0 && r == 0);
-  
-  axial_add_direction(q, r, 0);
-  axial_add_direction(q, r, 3);
-  assert(x == 0 && y == 0 && z == 0 && q == 0 && r == 0);
-    
-  axial_add_direction(q, r, 1);
-  axial_add_direction(q, r, 4);
-  assert(x == 0 && y == 0 && z == 0 && q == 0 && r == 0);
-    
-  axial_add_direction(q, r, 2);
-  axial_add_direction(q, r, 5);
-  assert(x == 0 && y == 0 && z == 0 && q == 0 && r == 0);
-      
-  axial_add_direction(q, r, 3);
-  axial_add_direction(q, r, 0);
-  assert(x == 0 && y == 0 && z == 0 && q == 0 && r == 0);
-  
-  
-  // void cubic_to_axial(int x, int y, int z, int &q, int &r) {
-  // void axial_to_cubic(int q, int r, int &x, int &y, int &z) {
-  // WorldHex *hex_axial(int q, int r)
-  // WorldHex *hex_cubic(int x, int y, int z)
-  // void axial_to_xy(int q, int r, int &x, int &y)
-  // void cubic_add(int &x, int &y, int &z, int dx, int dy, int dz)
-  // void cubic_add_direction(int &x, int &y, int &z, int direction) {
-  // void axial_add_direction(int &q, int &r, int direction) {
-  // direction_add(int direction, int rotation)
-  // cubic_distance(int x0, int y0, int z0, int x1, int y1, int z1)
-  // axial_distance(int q0, int r0, int q1, int r1)
-
-}
-
 void init() {
   eg_init(WIDTH, HEIGHT, "Patterns of Life");
   setlocale(LC_NUMERIC, "");
@@ -1016,6 +962,8 @@ void step() {
   frame++;
 }
 
+void unit_tests();
+
 int main(int argc, char *argv[]) {
   unit_tests();
   init();
@@ -1025,4 +973,58 @@ int main(int argc, char *argv[]) {
   printf("frames=%'d\ndays=%'d\nyears=%'d\n", frame, frame / DAY_LENGTH, frame / DAY_LENGTH / 365);
   eg_shutdown();
   return 0;
+}
+
+void unit_tests() {
+
+  int x = 0, y = 0, z = 0, q = 0, r = 0;
+  assert(x == 0 && y == 0 && z == 0 && q == 0 && r == 0);
+  cubic_to_axial(x, y, z, q, r);
+  assert(x == 0 && y == 0 && z == 0 && q == 0 && r == 0);
+  
+  cubic_add_direction(x, y, z, 0);
+  cubic_add_direction(x, y, z, 3);
+  assert(x == 0 && y == 0 && z == 0 && q == 0 && r == 0);
+  
+  cubic_add_direction(x, y, z, 1);
+  cubic_add_direction(x, y, z, 4);
+  assert(x == 0 && y == 0 && z == 0 && q == 0 && r == 0);
+  
+  cubic_add_direction(x, y, z, 2);
+  cubic_add_direction(x, y, z, 5);
+  assert(x == 0 && y == 0 && z == 0 && q == 0 && r == 0);
+  
+  cubic_add_direction(x, y, z, 3);
+  cubic_add_direction(x, y, z, 0);
+  assert(x == 0 && y == 0 && z == 0 && q == 0 && r == 0);
+  
+  axial_add_direction(q, r, 0);
+  axial_add_direction(q, r, 3);
+  assert(x == 0 && y == 0 && z == 0 && q == 0 && r == 0);
+    
+  axial_add_direction(q, r, 1);
+  axial_add_direction(q, r, 4);
+  assert(x == 0 && y == 0 && z == 0 && q == 0 && r == 0);
+    
+  axial_add_direction(q, r, 2);
+  axial_add_direction(q, r, 5);
+  assert(x == 0 && y == 0 && z == 0 && q == 0 && r == 0);
+      
+  axial_add_direction(q, r, 3);
+  axial_add_direction(q, r, 0);
+  assert(x == 0 && y == 0 && z == 0 && q == 0 && r == 0);
+  
+  
+  // void cubic_to_axial(int x, int y, int z, int &q, int &r) {
+  // void axial_to_cubic(int q, int r, int &x, int &y, int &z) {
+  // WorldHex *hex_axial(int q, int r)
+  // WorldHex *hex_cubic(int x, int y, int z)
+  // void axial_to_xy(int q, int r, int &x, int &y)
+  // void cubic_add(int &x, int &y, int &z, int dx, int dy, int dz)
+  // void cubic_add_direction(int &x, int &y, int &z, int direction) {
+  // void axial_add_direction(int &q, int &r, int direction) {
+  // direction_add(int direction, int rotation)
+  // cubic_distance(int x0, int y0, int z0, int x1, int y1, int z1)
+  // axial_distance(int q0, int r0, int q1, int r1)
+
 }
