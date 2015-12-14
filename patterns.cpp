@@ -49,7 +49,7 @@ const int Q = 100;
 const int R = 100;
 const int WORLD_SIZE = Q * R;
 
-const int DNA_SIZE = 24;
+const int DNA_SIZE = 42 + 4;
 
 static bool draw_extra_info = false;
 static bool moving = false;
@@ -195,6 +195,8 @@ struct Agent {
   int score;
   
   float memory1;
+  float memory2;
+  float memory3;
 
   gene dna[DNA_SIZE];
 
@@ -206,6 +208,7 @@ struct Agent {
     for (int i = 0; i < DNA_SIZE; i++) {
       dna[i] = norm_dist(gen);
     }
+    this->hue = fabs((float)((int)(fdis(gen) * 10000.0f) % 10000) / 10000.0f);
   }
 
   void remove_from_world() {
@@ -216,13 +219,8 @@ struct Agent {
   }
 
   void reset_agent() {
-
-    this->gene_cursor = 0;
-
     this->health_points = MAX_HEALTH_POINTS;
-    // this->behavior_points = MAX_BEHAVIOR_POINTS;
     this->score = 0;
-    this->hue = fabs((float)((int)(next_gene() * 10000.0f) % 10000) / 10000.0f);
     this->out = false;
     WorldHex *hex;
     do {
@@ -235,9 +233,14 @@ struct Agent {
   }
 
   void init_from_parent(Agent *parent) {
-    for (int i = 0; i < DNA_SIZE; i++) {
-      this->dna[i] = parent->dna[i];
+    for (int i = 0; i < DNA_SIZE-1; i++) {
+      if (fdis(gen) < 0.01f) {
+        this->dna[i] = parent->dna[i] + (norm_dist(gen) * 0.01f);  
+      } else {
+        this->dna[i] = parent->dna[i];
+      }
     }
+    this->hue = parent->hue;
   }
 
   static Agent agents[MAX_AGENTS];
@@ -488,11 +491,12 @@ public:
           hex_axial(Agent::agents[new_index].q, Agent::agents[new_index].r)->agent = 0;
           Agent::agents[new_index].q = new_q;
           Agent::agents[new_index].r = new_r;
+          Agent::agents[new_index].orientation = agent.orientation;
           hex_axial(Agent::agents[new_index].q, Agent::agents[new_index].r)->agent = &Agent::agents[new_index];
           // agent.behavior_points = Agent::agents[new_index].behavior_points =
           //     agent.behavior_points / 2.0f;
           agent.health_points = Agent::agents[new_index].health_points =
-              agent.health_points / 3.0f;
+              agent.health_points / 4.0f;
           // add_mark((struct Mark){BIRTH_MARK, new_q, new_r, frame});
         }
       }
@@ -724,24 +728,52 @@ void step() {
     float w18 = agent.next_gene();
     float w19 = agent.next_gene();
     float w20 = agent.next_gene();
+    float w21 = agent.next_gene();
+    float w22 = agent.next_gene();
+    float w23 = agent.next_gene();
+    float w24 = agent.next_gene();
+    float w25 = agent.next_gene();
+    float w26 = agent.next_gene();
+    float w27 = agent.next_gene();
+    float w28 = agent.next_gene();
+    float w29 = agent.next_gene();
+    float w30 = agent.next_gene();
+    float w31 = agent.next_gene();
+    float w32 = agent.next_gene();
+    float w33 = agent.next_gene();
+    float w34 = agent.next_gene();
+    float w35 = agent.next_gene();
+    float w36 = agent.next_gene();
+    float w37 = agent.next_gene();
+    float w38 = agent.next_gene();
+    float w39 = agent.next_gene();
+    float w40 = agent.next_gene();
+    float w41 = agent.next_gene();
+    float w42 = agent.next_gene();
     
-    float *weights1[4] = { &w1, &w2, &w3, &w4};
-    float *weights2[4] = { &w5, &w6, &w7, &w8};
-    float *weights3[4] = { &w9, &w10, &w11, &w12};
-    float *weights4[4] = { &w13, &w14, &w15, &w16};
-    float *weights5[4] = { &w17, &w18, &w19, &w20};
+    float *weights1[6] = { &w1, &w2, &w3, &w4, &w5, &w6};
+    float *weights2[6] = { &w7, &w8, &w9, &w10, &w11, &w12};
+    float *weights3[6] = { &w13, &w14, &w15, &w16, &w17, &w18};
+    float *weights4[6] = { &w19, &w20, &w21, &w22, &w23, &w24};
+    float *weights5[6] = { &w25, &w26, &w27, &w28, &w29, &w30};
+    float *weights6[6] = { &w31, &w32, &w33, &w34, &w35, &w36};
+    float *weights7[6] = { &w37, &w38, &w39, &w40, &w41, &w42};
     
     float input1 = foodSensor_here.sense(agent);
     float input2 = foodSensor_ahead1.sense(agent); 
     float input3 = selfHealthPointsSensor.sense(agent); 
-    float input4 = agent.memory1; 
-    float *inputs[4] = { &input1, &input2, &input3, &input4 };
+    float input4 = agent.memory1;
+    float input5 = agent.memory2;
+    float input6 = agent.memory3; 
+    float *inputs[6] = { &input1, &input2, &input3, &input4, &input5, &input6 };
     
-    Node node1 = Node(4, inputs, weights1);
-    Node node2 = Node(4, inputs, weights2);
-    Node node3 = Node(4, inputs, weights3);
-    Node node4 = Node(4, inputs, weights4);
-    Node node5 = Node(4, inputs, weights5);
+    Node node1 = Node(6, inputs, weights1);
+    Node node2 = Node(6, inputs, weights2);
+    Node node3 = Node(6, inputs, weights3);
+    Node node4 = Node(6, inputs, weights4);
+    Node node5 = Node(6, inputs, weights5);
+    Node node6 = Node(6, inputs, weights6);
+    Node node7 = Node(6, inputs, weights7);
     
     if (node1.activate() > agent.next_gene()) {
       eatingBehavior.behave(agent, 1.0f);
@@ -760,7 +792,11 @@ void step() {
     }
     
     node5.activate();
+    node6.activate();
+    node7.activate();
     agent.memory1 = node5.value;
+    agent.memory2 = node6.value;
+    agent.memory3 = node7.value;
   }
     
   // update record model
