@@ -12,3 +12,7 @@
 ## Building and Running
 
     make && ./buddies
+
+# TODO
+
+tanh
