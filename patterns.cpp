@@ -49,7 +49,7 @@ const int Q = 100;
 const int R = 100;
 const int WORLD_SIZE = Q * R;
 
-const int DNA_SIZE = 12;
+const int DNA_SIZE = 16;
 
 static bool draw_extra_info = false;
 static bool moving = false;
@@ -360,12 +360,12 @@ private:
 //   }
 // };
 
-// class SelfHealthPointsSensor : public Sensor {
-// public:
-//   virtual float sense(const Agent &agent) {
-//     return (float)agent.health_points / (float)MAX_HEALTH_POINTS;
-//   }
-// };
+class SelfHealthPointsSensor : public Sensor {
+public:
+  virtual float sense(const Agent &agent) {
+    return (float)agent.health_points / (float)MAX_HEALTH_POINTS;
+  }
+};
 
 // class SelfBehaviorPointsSensor : public Sensor {
 // public:
@@ -476,7 +476,7 @@ public:
       if (new_index < num_agents) {
         int new_q = agent.q;
         int new_r = agent.r;
-        int random_direction = fdis(gen) * 6.0f;
+        int random_direction = agent.orientation;//fdis(gen) * 6.0f;
         axial_add_direction(new_q, new_r, random_direction);
         WorldHex *hex = hex_axial(new_q, new_r);
         if (hex != 0 && hex->agent == 0) {
@@ -490,7 +490,7 @@ public:
           // agent.behavior_points = Agent::agents[new_index].behavior_points =
           //     agent.behavior_points / 2.0f;
           agent.health_points = Agent::agents[new_index].health_points =
-              agent.health_points / 2.0f;
+              agent.health_points / 3.0f;
           // add_mark((struct Mark){BIRTH_MARK, new_q, new_r, frame});
         }
       }
@@ -509,7 +509,7 @@ FoodSensor foodSensor_ahead1(0, 1);
 // FoodSensor foodSensor4(4);
 // FoodSensor foodSensor5(5);
 // ForwardBlockedSensor forwardBlockedSensor;
-// SelfHealthPointsSensor selfHealthPointsSensor;
+SelfHealthPointsSensor selfHealthPointsSensor;
 // SelfBehaviorPointsSensor selfBehaviorPointsSensor;
 // TimeOfDaySensor timeOfDaySensor;
 // AltSensor altSensor;
@@ -700,9 +700,6 @@ void step() {
       agent.remove_from_world();
       continue;
     }
-   
-    float input1 = foodSensor_here.sense(agent);
-    float input2 = foodSensor_ahead1.sense(agent);
     
     agent.gene_cursor = 0;
     float w1 = agent.next_gene();
@@ -713,13 +710,20 @@ void step() {
     float w6 = agent.next_gene();
     float w7 = agent.next_gene();
     float w8 = agent.next_gene();
+    float w9 = agent.next_gene();
+    float w10 = agent.next_gene();
+    float w11 = agent.next_gene();
+    float w12 = agent.next_gene();
     
-    float *inputs[2] = { &input1, &input2 };
+    float *weights1[3] = { &w1, &w2, &w3};
+    float *weights2[3] = { &w4, &w5, &w6};
+    float *weights3[3] = { &w7, &w8, &w9};
+    float *weights4[3] = { &w10, &w11, &w12};
     
-    float *weights1[2] = { &w1, &w2};
-    float *weights2[2] = { &w3, &w4};
-    float *weights3[2] = { &w5, &w6};
-    float *weights4[2] = { &w7, &w8};
+    float input1 = foodSensor_here.sense(agent);
+    float input2 = foodSensor_ahead1.sense(agent); 
+    float input3 = selfHealthPointsSensor.sense(agent); 
+    float *inputs[3] = { &input1, &input2, &input3 };
     
     Node node1 = Node(2, inputs, weights1);
     Node node2 = Node(2, inputs, weights2);
