@@ -9,7 +9,7 @@ public:
 
 class Behavior {
 public:
-  virtual bool behave(Agent &agent, float perceptron_output) = 0;
+  virtual void behave(Agent &agent, float perceptron_output) = 0;
 };
 
 struct WorldHex {
@@ -305,36 +305,12 @@ public:
     } else {
       return 0.0f;
     }
-    // for (int j = 0; j < FORWARD_FOOD_DISTANCE_SENSOR_LIMIT; j++) {
-    //   WorldHex *hex = hex_cubic(x, y, z);
-    //   if (hex != 0 && hex->food) {
-    //     return (FORWARD_FOOD_DISTANCE_SENSOR_LIMIT - (float)j) / (float)FORWARD_FOOD_DISTANCE_SENSOR_LIMIT;
-    //   }
-    //   cubic_add_direction(x, y, z, direction);
-    // }
-    // return 1.0f;
   }
 
 private:
   int relative_direction;
   int distance;
 };
-
-// class ForwardBlockedSensor : public Sensor {
-// public:
-//   virtual float sense(const Agent &agent) {
-//     int x, y, z;
-//     axial_to_cubic(agent.q, agent.r, x, y, z);
-//     for (int j = 0; j < FORWARD_BLOCKED_DISTANCE_SENSOR_LIMIT; j++) {
-//       WorldHex *hex = hex_cubic(x, y, z);
-//       if (hex == 0 || (j != 0 && hex->agent != 0)) {
-//         return (float)j / (float)FORWARD_BLOCKED_DISTANCE_SENSOR_LIMIT;
-//       }
-//       cubic_add_direction(x, y, z, agent.orientation);
-//     }
-//     return 1.0f;
-//   }
-// };
 
 class SelfHealthPointsSensor : public Sensor {
 public:
@@ -343,63 +319,24 @@ public:
   }
 };
 
-// class SelfBehaviorPointsSensor : public Sensor {
-// public:
-//   virtual float sense(const Agent &agent) {
-//     return (float)agent.behavior_points / (float)MAX_BEHAVIOR_POINTS;
-//   }
-// };
-
-// class TimeOfDaySensor : public Sensor {
-// public:
-//   virtual float sense(const Agent &agent) { return time_of_day_modifier; }
-// };
-
-// class AltSensor : public Sensor {
-// public:
-//   virtual float sense(const Agent &agent) {
-//     return hex_axial(agent.q, agent.r)->alt;
-//   }
-// };
-
 class RotationalBehavior : public Behavior {
 public:
-  virtual bool behave(Agent &agent, float perceptron_output) {
-    int rotational = 0; 
+  virtual void behave(Agent &agent, float perceptron_output) { 
     if (perceptron_output < 0.5f)
-      rotational = -1;
+      agent.orientation = direction_add(agent.orientation, +1);
     else if (perceptron_output > 0.5f)
-      rotational = 1;
-    else
-      return false;
-    // if (rotational == 0)
-      // return false;
-    // if (agent.behavior_points > 1.0f) {
-      agent.orientation = direction_add(agent.orientation, rotational);
-      // agent.behavior_points -= fabs((float)rotational);
-    // }
-    return true;
+      agent.orientation = direction_add(agent.orientation, -1);
   }
 };
 
 class LinearBehavior : public Behavior {
 public:
-  virtual bool behave(Agent &agent, float perceptron_output) {
-    int linear = 1;//abs((int)(perceptron_output * 1.5f));
-    // if (linear == 0)
-    //   return false;
+  virtual void behave(Agent &agent, float perceptron_output) {
+    int linear = 1;
     hex_axial(agent.q, agent.r)->agent = 0;
     int x, y, z;
     axial_to_cubic(agent.q, agent.r, x, y, z);
     for (int j = 0; j < linear; j++) {
-      // float alt = hex_cubic(x, y, z)->alt;
-      // float cost = 2.0f;
-      // if (alt > 0.5f) {
-        // cost += alt * 50.0f;
-      // }
-      // if (agent.behavior_points < cost) {
-      //   break;
-      // }
       int x0 = x, y0 = y, z0 = z;
       cubic_add_direction(x0, y0, z0, agent.orientation);
       WorldHex *hex = hex_cubic(x0, y0, z0);
@@ -407,72 +344,55 @@ public:
         x = x0;
         y = y0;
         z = z0;
-        // agent.behavior_points -= cost;
       }
     }
     cubic_to_axial(x, y, z, agent.q, agent.r);
     hex_axial(agent.q, agent.r)->agent = &agent;
-    return true;
   }
 };
 
 class EatingBehavior : public Behavior {
 public:
-  virtual bool behave(Agent &agent, float perceptron_output) {
-    // bool eating = true;//fabs(perceptron_output) > 0.5f;
-    // if (!eating)
-      // return false;
-    // float cost = 10.0f;//fabs((MAX_HEALTH_POINTS - agent.health_points) - FOOD_VALUE);
-    // if (eating) { // && agent.behavior_points > cost) {
-      WorldHex *hex = hex_axial(agent.q, agent.r);
-      if (hex != 0 && hex->food) {
-        hex->food = false;
-        agent.health_points =
-            min(MAX_HEALTH_POINTS, agent.health_points + FOOD_VALUE);
-        agent.score++;
-        // agent.behavior_points -= cost;
-        // add_mark((struct Mark){EAT_MARK, agent.q, agent.r, frame});
-        }
-    // }
-    return true;
+  virtual void behave(Agent &agent, float perceptron_output) {
+    WorldHex *hex = hex_axial(agent.q, agent.r);
+    if (hex != 0 && hex->food) {
+      hex->food = false;
+      agent.health_points =
+          min(MAX_HEALTH_POINTS, agent.health_points + FOOD_VALUE);
+      agent.score++;
+    }
   }
 };
 
 class SpawningBehavior : public Behavior {
 public:
-  virtual bool behave(Agent &agent, float perceptron_output) {
-    // bool spawning = true;//fabs(perceptron_output) > 0.5f;
-    // if (!spawning)
-      // return false;
-    // if (agent.health_points > (MAX_HEALTH_POINTS / 2.0f)) { // agent.behavior_points > 50.0f && 
-      int new_index = RESERVED_AGENT_COUNT;
-      while (new_index < num_agents && !agents[new_index].out) {
-        new_index++;
+  virtual void behave(Agent &agent, float perceptron_output) {
+    int new_index = RESERVED_AGENT_COUNT;
+    while (new_index < num_agents && !agents[new_index].out) {
+      new_index++;
+    }
+    if (new_index < num_agents) {
+      int new_q = agent.q;
+      int new_r = agent.r;
+      int random_direction = agent.orientation;//fdis(gen) * 6.0f;
+      axial_add_direction(new_q, new_r, random_direction);
+      WorldHex *hex = hex_axial(new_q, new_r);
+      if (hex != 0 && hex->agent == 0) {
+        agents[new_index].init_from_parent(&agent);
+        agents[new_index].reset_agent();
+        // agents[new_index].parent = &agent;
+        hex_axial(agents[new_index].q, agents[new_index].r)->agent = 0;
+        agents[new_index].q = new_q;
+        agents[new_index].r = new_r;
+        agents[new_index].orientation = agent.orientation;
+        hex_axial(agents[new_index].q, agents[new_index].r)->agent = &agents[new_index];
+        // agent.behavior_points = agents[new_index].behavior_points =
+        //     agent.behavior_points / 2.0f;
+        agent.health_points = agents[new_index].health_points =
+            agent.health_points / 4.0f;
+        // add_mark((struct Mark){BIRTH_MARK, new_q, new_r, frame});
       }
-      if (new_index < num_agents) {
-        int new_q = agent.q;
-        int new_r = agent.r;
-        int random_direction = agent.orientation;//fdis(gen) * 6.0f;
-        axial_add_direction(new_q, new_r, random_direction);
-        WorldHex *hex = hex_axial(new_q, new_r);
-        if (hex != 0 && hex->agent == 0) {
-          agents[new_index].init_from_parent(&agent);
-          agents[new_index].reset_agent();
-          // agents[new_index].parent = &agent;
-          hex_axial(agents[new_index].q, agents[new_index].r)->agent = 0;
-          agents[new_index].q = new_q;
-          agents[new_index].r = new_r;
-          agents[new_index].orientation = agent.orientation;
-          hex_axial(agents[new_index].q, agents[new_index].r)->agent = &agents[new_index];
-          // agent.behavior_points = agents[new_index].behavior_points =
-          //     agent.behavior_points / 2.0f;
-          agent.health_points = agents[new_index].health_points =
-              agent.health_points / 4.0f;
-          // add_mark((struct Mark){BIRTH_MARK, new_q, new_r, frame});
-        }
-      }
-    // }
-    return true;
+    }
   }
 };
 
