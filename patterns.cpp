@@ -243,32 +243,6 @@ struct Agent {
     this->hue = parent->hue;
   }
 
-  static Agent agents[MAX_AGENTS];
-
-  static int select() {
-    int total_score = 0;
-    for (int i = 0; i < num_agents; i++) {
-      Agent &agent = Agent::agents[i];
-      if (agent.out) {
-        continue;
-      }
-      total_score += agent.score;
-    }
-
-    int selected_index = 0;
-    int random_score = (int)(fdis(gen) * (float)total_score);
-    for (int i = 0; i < num_agents && random_score >= 0.0f; i++) {
-      Agent agent = Agent::agents[i];
-      if (agent.out) {
-        continue;
-      }
-      random_score -= agent.score;
-      selected_index = i;
-    }
-
-    return selected_index;
-  }
-
   int gene_cursor = 0;
   
   gene next_gene() {
@@ -277,7 +251,29 @@ struct Agent {
   }
 };
 
-Agent Agent::agents[MAX_AGENTS];
+Agent agents[MAX_AGENTS];
+
+int select() {
+  int total_score = 0;
+  for (int i = 0; i < num_agents; i++) {
+    Agent &agent = agents[i];
+    if (agent.out) {
+      continue;
+    }
+    total_score += agent.score;
+  }
+  int selected_index = 0;
+  int random_score = (int)(fdis(gen) * (float)total_score);
+  for (int i = 0; i < num_agents && random_score >= 0.0f; i++) {
+    Agent agent = agents[i];
+    if (agent.out) {
+      continue;
+    }
+    random_score -= agent.score;
+    selected_index = i;
+  }
+  return selected_index;
+}
 
 struct Record {
   float hues[MAX_AGENTS];
@@ -475,7 +471,7 @@ public:
       // return false;
     // if (agent.health_points > (MAX_HEALTH_POINTS / 2.0f)) { // agent.behavior_points > 50.0f && 
       int new_index = RESERVED_AGENT_COUNT;
-      while (new_index < num_agents && !Agent::agents[new_index].out) {
+      while (new_index < num_agents && !agents[new_index].out) {
         new_index++;
       }
       if (new_index < num_agents) {
@@ -485,17 +481,17 @@ public:
         axial_add_direction(new_q, new_r, random_direction);
         WorldHex *hex = hex_axial(new_q, new_r);
         if (hex != 0 && hex->agent == 0) {
-          Agent::agents[new_index].init_from_parent(&agent);
-          Agent::agents[new_index].reset_agent();
-          // Agent::agents[new_index].parent = &agent;
-          hex_axial(Agent::agents[new_index].q, Agent::agents[new_index].r)->agent = 0;
-          Agent::agents[new_index].q = new_q;
-          Agent::agents[new_index].r = new_r;
-          Agent::agents[new_index].orientation = agent.orientation;
-          hex_axial(Agent::agents[new_index].q, Agent::agents[new_index].r)->agent = &Agent::agents[new_index];
-          // agent.behavior_points = Agent::agents[new_index].behavior_points =
+          agents[new_index].init_from_parent(&agent);
+          agents[new_index].reset_agent();
+          // agents[new_index].parent = &agent;
+          hex_axial(agents[new_index].q, agents[new_index].r)->agent = 0;
+          agents[new_index].q = new_q;
+          agents[new_index].r = new_r;
+          agents[new_index].orientation = agent.orientation;
+          hex_axial(agents[new_index].q, agents[new_index].r)->agent = &agents[new_index];
+          // agent.behavior_points = agents[new_index].behavior_points =
           //     agent.behavior_points / 2.0f;
-          agent.health_points = Agent::agents[new_index].health_points =
+          agent.health_points = agents[new_index].health_points =
               agent.health_points / 4.0f;
           // add_mark((struct Mark){BIRTH_MARK, new_q, new_r, frame});
         }
@@ -630,7 +626,7 @@ void step() {
           printf("food_spawn_rate=%f\n", food_spawn_rate);
         } else {
           if (num_agents > 0) {
-            Agent::agents[num_agents - 1].remove_from_world();
+            agents[num_agents - 1].remove_from_world();
             --num_agents;
             printf("num_agents=%d\n", num_agents);
           }
@@ -644,8 +640,8 @@ void step() {
           printf("food_spawn_rate=%f\n", food_spawn_rate);
         } else {
           if (num_agents < MAX_AGENTS) {
-            Agent::agents[num_agents].randomize();
-            Agent::agents[num_agents++].reset_agent();
+            agents[num_agents].randomize();
+            agents[num_agents++].reset_agent();
             printf("num_agents=%d\n", num_agents);
           }
         }
@@ -677,7 +673,7 @@ void step() {
 
   // respawn agents 0-n
   for (int i = 0; i < RESERVED_AGENT_COUNT; i++) {
-    Agent &agent = Agent::agents[i];
+    Agent &agent = agents[i];
     if (agent.out) {
       agent.randomize();
       agent.reset_agent();
@@ -692,7 +688,7 @@ void step() {
   // behavior model
   for (int i = 0; i < num_agents; i++) {
 
-    Agent &agent = Agent::agents[i];
+    Agent &agent = agents[i];
 
     if (agent.out) {
       continue;
@@ -798,21 +794,21 @@ void step() {
     agent.memory2 = node6.value;
     agent.memory3 = node7.value;
   }
-    
+      
   // update record model
   if (frame % RECORD_SAMPLE_RATE == 0 && num_agents > 0) {
 
-    int selected_index = Agent::select();
+    int selected_index = select();
 
-    records[records_index].selected_hue = Agent::agents[selected_index].hue;
+    records[records_index].selected_hue = agents[selected_index].hue;
 
     for (int i = 0; i < DNA_SIZE; i++) {
       records[records_index].dna[i] =
-          Agent::agents[selected_index].dna[i]; // memcpy
+          agents[selected_index].dna[i]; // memcpy
     }
 
     for (int i = 0; i < MAX_AGENTS; i++) {
-      const Agent &agent = Agent::agents[i];
+      const Agent &agent = agents[i];
       records[records_index].scores[i] = agent.score;
       records[records_index].hues[i] = agent.hue;
       records[records_index].outs[i] = agent.out;
@@ -853,7 +849,7 @@ void step() {
 
       if (following != -1) {
         int x, y;
-        axial_to_xy(Agent::agents[following].q, Agent::agents[following].r, x, y);
+        axial_to_xy(agents[following].q, agents[following].r, x, y);
         camera_x = x;
         camera_y = y;
       }
@@ -902,7 +898,7 @@ void step() {
 
       // draw agents
       for (int i = 0; i < num_agents; i++) {
-        Agent agent = Agent::agents[i];
+        Agent agent = agents[i];
         if (agent.out) {
           continue;
         }
