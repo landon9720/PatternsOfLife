@@ -1,4 +1,4 @@
-#include "buddies.h"
+#include "patterns.h"
 
 struct Agent;
 
