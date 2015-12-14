@@ -15,3 +15,5 @@ using std::max;
 #include <SDL2/SDL_mixer.h>
 #include <limits>
 #include <cfloat>
+
+#include "Node.h"
