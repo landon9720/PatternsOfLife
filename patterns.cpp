@@ -700,9 +700,7 @@ void step() {
       agent.remove_from_world();
       continue;
     }
-    
-    float w = 0.5f;
-    
+   
     float input1 = foodSensor_here.sense(agent);
     float input2 = foodSensor_ahead1.sense(agent);
     
@@ -723,10 +721,10 @@ void step() {
     float *weights3[2] = { &w5, &w6};
     float *weights4[2] = { &w7, &w8};
     
-    Node node1 = Node(1, inputs, weights1);
-    Node node2 = Node(1, inputs, weights2);
-    Node node3 = Node(1, inputs, weights3);
-    Node node4 = Node(1, inputs, weights4);
+    Node node1 = Node(2, inputs, weights1);
+    Node node2 = Node(2, inputs, weights2);
+    Node node3 = Node(2, inputs, weights3);
+    Node node4 = Node(2, inputs, weights4);
     
     if (node1.activate() > agent.next_gene()) {
       eatingBehavior.behave(agent, 1.0f);
