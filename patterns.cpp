@@ -186,13 +186,6 @@ struct Agent {
     this->hue = fabs((float)((int)(fdis(gen) * 10000.0f) % 10000) / 10000.0f);
   }
 
-  void remove_from_world() {
-    WorldHex *hex = hex_axial(this->q, this->r);
-    assert(hex != 0);
-    hex->agent = 0;
-    this->out = true;
-  }
-
   void reset_agent() {
     this->health_points = MAX_HEALTH_POINTS;
     this->score = 0;
@@ -248,6 +241,14 @@ int select() {
     selected_index = i;
   }
   return selected_index;
+}
+
+void remove_from_world(Agent &agent) {
+  WorldHex *hex = hex_axial(agent.q, agent.r);
+  assert(hex != 0);
+  assert(hex->agent == &agent);
+  hex->agent = 0;
+  agent.out = true;
 }
 
 struct Record {
@@ -505,7 +506,7 @@ void step() {
           printf("food_spawn_rate=%f\n", food_spawn_rate);
         } else {
           if (num_agents > 0) {
-            agents[num_agents - 1].remove_from_world();
+            remove_from_world(agents[num_agents - 1]);
             --num_agents;
             printf("num_agents=%d\n", num_agents);
           }
@@ -585,7 +586,7 @@ void step() {
 
     // death
     if (agent.health_points <= 0.0f) {
-      agent.remove_from_world();
+      remove_from_world(agent);
       continue;
     }
     
