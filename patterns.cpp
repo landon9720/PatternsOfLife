@@ -56,7 +56,7 @@ void cubic_to_axial(int x, int y, int z, int &q, int &r) {
 void axial_to_cubic(int q, int r, int &x, int &y, int &z) {
   x = q;
   z = r;
-  y = -x - z;
+  y = -x-z;
 }
 
 static WorldHex world[WORLD_SIZE];
@@ -120,7 +120,8 @@ void axial_add_direction(int &q, int &r, int direction) {
 }
 
 int direction_add(int direction, int rotation) {
-  assert(direction >= 0 && direction <= 5);
+  assert(direction >= 0);
+  assert( direction <= 5);
   int result = direction + rotation;
   while (result < 0)
     result += 6;
@@ -151,7 +152,7 @@ const int DAY_LENGTH = 2000;
 const int MAX_AGENTS = 1000;
 const int RECORD_SAMPLE_RATE = 100;
 const int RESERVED_AGENT_COUNT = 1;
-const int TURBO_RATE = 300;
+const int TURBO_RATE = 307;
 
 static std::random_device rd;
 static std::mt19937 gen(rd());
