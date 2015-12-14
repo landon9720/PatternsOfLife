@@ -24,7 +24,7 @@ const int Q = 100;
 const int R = 100;
 const int WORLD_SIZE = Q * R;
 
-const int DNA_SIZE = 42 + 4;
+const int DNA_SIZE = 42 + 7;
 
 static bool draw_extra_info = false;
 static bool moving = false;
@@ -151,7 +151,7 @@ const int DAY_LENGTH = 2000;
 // const int FORWARD_FOOD_DISTANCE_SENSOR_LIMIT = 7;
 const int MAX_AGENTS = 1000;
 const int RECORD_SAMPLE_RATE = 100;
-const int RESERVED_AGENT_COUNT = 20;
+const int NEWPOP_AGENT_COUNT = 20;
 const int TURBO_RATE = 307;
 
 static std::random_device rd;
@@ -322,29 +322,30 @@ public:
 class RotationalBehavior : public Behavior {
 public:
   virtual void behave(Agent &agent, float perceptron_output) { 
-    if (perceptron_output < 0.5f)
+    if (perceptron_output < 0.5f) {
       agent.orientation = direction_add(agent.orientation, +1);
-    else if (perceptron_output > 0.5f)
+      agent.health_points -= .5f;
+    } else if (perceptron_output > 0.5f) {
       agent.orientation = direction_add(agent.orientation, -1);
+      agent.health_points -= .5f;
+    }
   }
 };
 
 class LinearBehavior : public Behavior {
 public:
   virtual void behave(Agent &agent, float perceptron_output) {
-    int linear = 1;
     hex_axial(agent.q, agent.r)->agent = 0;
     int x, y, z;
     axial_to_cubic(agent.q, agent.r, x, y, z);
-    for (int j = 0; j < linear; j++) {
-      int x0 = x, y0 = y, z0 = z;
-      cubic_add_direction(x0, y0, z0, agent.orientation);
-      WorldHex *hex = hex_cubic(x0, y0, z0);
-      if (hex != 0 && hex->agent == 0) {
-        x = x0;
-        y = y0;
-        z = z0;
-      }
+    int x0 = x, y0 = y, z0 = z;
+    cubic_add_direction(x0, y0, z0, agent.orientation);
+    WorldHex *hex = hex_cubic(x0, y0, z0);
+    if (hex != 0 && hex->agent == 0) {
+      x = x0;
+      y = y0;
+      z = z0;
+      agent.health_points -= .5f;
     }
     cubic_to_axial(x, y, z, agent.q, agent.r);
     hex_axial(agent.q, agent.r)->agent = &agent;
@@ -357,8 +358,7 @@ public:
     WorldHex *hex = hex_axial(agent.q, agent.r);
     if (hex != 0 && hex->food) {
       hex->food = false;
-      agent.health_points =
-          min(MAX_HEALTH_POINTS, agent.health_points + FOOD_VALUE);
+      agent.health_points = min(MAX_HEALTH_POINTS, agent.health_points + FOOD_VALUE);
       agent.score++;
     }
   }
@@ -367,7 +367,7 @@ public:
 class SpawningBehavior : public Behavior {
 public:
   virtual void behave(Agent &agent, float perceptron_output) {
-    int new_index = RESERVED_AGENT_COUNT;
+    int new_index = 0;
     while (new_index < num_agents && !agents[new_index].out) {
       new_index++;
     }
@@ -551,9 +551,16 @@ void step() {
   nudge = false;
 
   // respawn agents 0-n
-  for (int i = 0; i < RESERVED_AGENT_COUNT; i++) {
-    Agent &agent = agents[i];
-    if (agent.out) {
+  bool allout = true;
+  for (int i = 0; i < num_agents; i++) {
+    if (!agents[i].out) {
+      allout = false;
+      break;
+    }
+  }
+  if (allout) {
+    for (int i = 0; i < NEWPOP_AGENT_COUNT; i++) {
+      Agent &agent = agents[i];
       agent.randomize();
       agent.reset_agent();
     }
@@ -669,9 +676,9 @@ void step() {
     node5.activate();
     node6.activate();
     node7.activate();
-    agent.memory1 = node5.value;
-    agent.memory2 = node6.value;
-    agent.memory3 = node7.value;
+    agent.memory1 = node5.value * agent.next_gene();
+    agent.memory2 = node6.value * agent.next_gene();
+    agent.memory3 = node7.value * agent.next_gene();
   }
       
   // update record model
