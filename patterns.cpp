@@ -1,5 +1,30 @@
 #include "patterns.h"
 
+class Node {
+  public:
+    Node(int input_count, float **inputs, float **weights) {
+      this->input_count = input_count;
+      this->inputs = inputs;
+      this->weights = weights;
+    }
+    float activate() {
+      float sum = 0.0f;
+      for (int i = 0; i < input_count; i++) {
+        sum += *(inputs[i]) * *(weights[i]);
+      }
+      value = activation_function(sum);
+      return value;
+    }
+    float value;
+  private:
+    float activation_function(float v) {
+      return tanh(v);
+    }
+    int input_count;
+    float **inputs;
+    float **weights;
+};
+
 struct Agent;
 
 class Sensor {
@@ -20,11 +45,11 @@ struct WorldHex {
 const int HEX_SIZE = 15;
 const int WIDTH = 1280 * 0.9f;
 const int HEIGHT = 720 * 0.9f;
-const int Q = 50;
-const int R = 50;
+const int Q = 100;
+const int R = 100;
 const int WORLD_SIZE = Q * R;
 
-const int DNA_SIZE = 1;
+const int DNA_SIZE = 9;
 
 static bool draw_extra_info = false;
 static bool moving = false;
@@ -151,7 +176,7 @@ const int DAY_LENGTH = 2000;
 // const int FORWARD_FOOD_DISTANCE_SENSOR_LIMIT = 7;
 const int MAX_AGENTS = 1000;
 const int RECORD_SAMPLE_RATE = 100;
-const int RESERVED_AGENT_COUNT = 1;
+const int RESERVED_AGENT_COUNT = 20;
 const int TURBO_RATE = 307;
 
 static std::random_device rd;
@@ -239,8 +264,8 @@ struct Agent {
     return selected_index;
   }
 
-private:
   int gene_cursor = 0;
+  
   gene next_gene() {
     assert(gene_cursor < DNA_SIZE);
     return this->dna[gene_cursor++];
@@ -652,12 +677,6 @@ void step() {
     world[(int)(fdis(gen) * WORLD_SIZE)].food = true;
   }
 
-  // // day or night
-  // time_of_day = frame % DAY_LENGTH;
-  // time_of_day_modifier =
-  //     sinf(((float)time_of_day / (float)DAY_LENGTH) * 2.0f * M_PI);
-  // bool day = time_of_day_modifier > 0.0f;
-
   // behavior model
   for (int i = 0; i < num_agents; i++) {
 
@@ -672,24 +691,59 @@ void step() {
 
     // death
     if (agent.health_points <= 0.0f) {
-      // add_mark((struct Mark){DEATH_MARK, agent.q, agent.r, frame});
       agent.remove_from_world();
       continue;
     }
     
-    if (foodSensor_here.sense(agent) > 0.5f) {
+    float w = 0.5f;
+    
+    float input1 = foodSensor_here.sense(agent);
+    float input2 = foodSensor_ahead1.sense(agent);
+    
+    agent.gene_cursor = 0;
+    float w1 = agent.next_gene();
+    float w2 = agent.next_gene();
+    float w3 = agent.next_gene();
+    float w4 = agent.next_gene();
+    float w5 = agent.next_gene();
+    float w6 = agent.next_gene();
+    
+    float *inputs[2] = { &input1, &input2 };
+    
+    float *weights1[2] = { &w1, &w2};
+    float *weights2[2] = { &w3, &w4};
+    float *weights3[2] = { &w5, &w6};
+    
+    Node node1 = Node(1, inputs, weights1);
+    Node node2 = Node(1, inputs, weights2);
+    Node node3 = Node(1, inputs, weights3);
+    
+    if (node1.activate() > agent.next_gene()) {
       eatingBehavior.behave(agent, 1.0f);
-    } else {
-      if (foodSensor_ahead1.sense(agent) > 0.5f) {
-        linearBehavior.behave(agent, 1.0f);
-      } else {
-        rotationalBehavior.behave(agent, 1.0f);
-      }
     }
+    if (node2.activate() > agent.next_gene()) {
+      linearBehavior.behave(agent, 1.0f);
+    }
+    if (node3.activate() > agent.next_gene()) {
+      rotationalBehavior.behave(agent, 1.0f);
+    }
+    
+    
+    
+    
+    // if ( > 0.5f) {
+    //   eatingBehavior.behave(agent, 1.0f);
+    // } else {
+    //   if (foodSensor_ahead1.sense(agent) > 0.5f) {
+    //     
+    //   } else {
+    //     
+    //   }
+    // }
       
-    if (agent.health_points > (MAX_HEALTH_POINTS / 2.0f)) {
-      spawningBehavior.behave(agent, 1.0f);
-    }
+    // if (agent.health_points > (MAX_HEALTH_POINTS / 2.0f)) {
+    //   spawningBehavior.behave(agent, 1.0f);
+    // }
     
   }
 
