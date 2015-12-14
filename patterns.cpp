@@ -49,7 +49,7 @@ const int Q = 100;
 const int R = 100;
 const int WORLD_SIZE = Q * R;
 
-const int DNA_SIZE = 9;
+const int DNA_SIZE = 12;
 
 static bool draw_extra_info = false;
 static bool moving = false;
@@ -389,14 +389,20 @@ private:
 class RotationalBehavior : public Behavior {
 public:
   virtual bool behave(Agent &agent, float perceptron_output) {
-    int rotational = 1;//(int)(perceptron_output * 1.5f);
+    int rotational = 0; 
+    if (perceptron_output < 0.5f)
+      rotational = -1;
+    else if (perceptron_output > 0.5f)
+      rotational = 1;
+    else
+      return false;
     // if (rotational == 0)
       // return false;
     // if (agent.behavior_points > 1.0f) {
       agent.orientation = direction_add(agent.orientation, rotational);
       // agent.behavior_points -= fabs((float)rotational);
     // }
-    return false;
+    return true;
   }
 };
 
@@ -707,46 +713,38 @@ void step() {
     float w4 = agent.next_gene();
     float w5 = agent.next_gene();
     float w6 = agent.next_gene();
+    float w7 = agent.next_gene();
+    float w8 = agent.next_gene();
     
     float *inputs[2] = { &input1, &input2 };
     
     float *weights1[2] = { &w1, &w2};
     float *weights2[2] = { &w3, &w4};
     float *weights3[2] = { &w5, &w6};
+    float *weights4[2] = { &w7, &w8};
     
     Node node1 = Node(1, inputs, weights1);
     Node node2 = Node(1, inputs, weights2);
     Node node3 = Node(1, inputs, weights3);
+    Node node4 = Node(1, inputs, weights4);
     
     if (node1.activate() > agent.next_gene()) {
       eatingBehavior.behave(agent, 1.0f);
     }
+    
     if (node2.activate() > agent.next_gene()) {
       linearBehavior.behave(agent, 1.0f);
     }
-    if (node3.activate() > agent.next_gene()) {
-      rotationalBehavior.behave(agent, 1.0f);
+    
+    rotationalBehavior.behave(agent, node3.activate() * agent.next_gene());
+    
+    if (node4.activate() > agent.next_gene()) {
+      if (agent.health_points > (MAX_HEALTH_POINTS / 2.0f)) {
+        spawningBehavior.behave(agent, 1.0f);
+      }
     }
-    
-    
-    
-    
-    // if ( > 0.5f) {
-    //   eatingBehavior.behave(agent, 1.0f);
-    // } else {
-    //   if (foodSensor_ahead1.sense(agent) > 0.5f) {
-    //     
-    //   } else {
-    //     
-    //   }
-    // }
-      
-    // if (agent.health_points > (MAX_HEALTH_POINTS / 2.0f)) {
-    //   spawningBehavior.behave(agent, 1.0f);
-    // }
-    
   }
-
+    
   // update record model
   if (frame % RECORD_SAMPLE_RATE == 0 && num_agents > 0) {
 
