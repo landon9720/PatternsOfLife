@@ -374,23 +374,18 @@ public:
     if (new_index < num_agents) {
       int new_q = agent.q;
       int new_r = agent.r;
-      int random_direction = agent.orientation;//fdis(gen) * 6.0f;
+      int random_direction = agent.orientation;
       axial_add_direction(new_q, new_r, random_direction);
       WorldHex *hex = hex_axial(new_q, new_r);
       if (hex != 0 && hex->agent == 0) {
         agents[new_index].init_from_parent(&agent);
-        agents[new_index].reset_agent();
-        // agents[new_index].parent = &agent;
+        agents[new_index].reset_agent(); 
         hex_axial(agents[new_index].q, agents[new_index].r)->agent = 0;
         agents[new_index].q = new_q;
         agents[new_index].r = new_r;
         agents[new_index].orientation = agent.orientation;
         hex_axial(agents[new_index].q, agents[new_index].r)->agent = &agents[new_index];
-        // agent.behavior_points = agents[new_index].behavior_points =
-        //     agent.behavior_points / 2.0f;
-        agent.health_points = agents[new_index].health_points =
-            agent.health_points / 4.0f;
-        // add_mark((struct Mark){BIRTH_MARK, new_q, new_r, frame});
+        agent.health_points = agents[new_index].health_points = agent.health_points / 4.0f;
       }
     }
   }
@@ -398,18 +393,7 @@ public:
 
 FoodSensor foodSensor_here(0, 0);
 FoodSensor foodSensor_ahead1(0, 1);
-// FoodSensor foodSensor_ahead2(0, 2);
-// FoodSensor foodSensor_ahead3(0, 3);
-// FoodSensor foodSensor1(1);
-// FoodSensor foodSensor2(2);
-// FoodSensor foodSensor3(3);
-// FoodSensor foodSensor4(4);
-// FoodSensor foodSensor5(5);
-// ForwardBlockedSensor forwardBlockedSensor;
 SelfHealthPointsSensor selfHealthPointsSensor;
-// SelfBehaviorPointsSensor selfBehaviorPointsSensor;
-// TimeOfDaySensor timeOfDaySensor;
-// AltSensor altSensor;
 
 RotationalBehavior rotationalBehavior;
 LinearBehavior linearBehavior;
