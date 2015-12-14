@@ -49,7 +49,7 @@ const int Q = 100;
 const int R = 100;
 const int WORLD_SIZE = Q * R;
 
-const int DNA_SIZE = 16;
+const int DNA_SIZE = 24;
 
 static bool draw_extra_info = false;
 static bool moving = false;
@@ -193,6 +193,8 @@ struct Agent {
   float hue;
   int q, r, orientation;
   int score;
+  
+  float memory1;
 
   gene dna[DNA_SIZE];
 
@@ -714,21 +716,32 @@ void step() {
     float w10 = agent.next_gene();
     float w11 = agent.next_gene();
     float w12 = agent.next_gene();
+    float w13 = agent.next_gene();
+    float w14 = agent.next_gene();
+    float w15 = agent.next_gene();
+    float w16 = agent.next_gene();
+    float w17 = agent.next_gene();
+    float w18 = agent.next_gene();
+    float w19 = agent.next_gene();
+    float w20 = agent.next_gene();
     
-    float *weights1[3] = { &w1, &w2, &w3};
-    float *weights2[3] = { &w4, &w5, &w6};
-    float *weights3[3] = { &w7, &w8, &w9};
-    float *weights4[3] = { &w10, &w11, &w12};
+    float *weights1[4] = { &w1, &w2, &w3, &w4};
+    float *weights2[4] = { &w5, &w6, &w7, &w8};
+    float *weights3[4] = { &w9, &w10, &w11, &w12};
+    float *weights4[4] = { &w13, &w14, &w15, &w16};
+    float *weights5[4] = { &w17, &w18, &w19, &w20};
     
     float input1 = foodSensor_here.sense(agent);
     float input2 = foodSensor_ahead1.sense(agent); 
     float input3 = selfHealthPointsSensor.sense(agent); 
-    float *inputs[3] = { &input1, &input2, &input3 };
+    float input4 = agent.memory1; 
+    float *inputs[4] = { &input1, &input2, &input3, &input4 };
     
-    Node node1 = Node(2, inputs, weights1);
-    Node node2 = Node(2, inputs, weights2);
-    Node node3 = Node(2, inputs, weights3);
-    Node node4 = Node(2, inputs, weights4);
+    Node node1 = Node(4, inputs, weights1);
+    Node node2 = Node(4, inputs, weights2);
+    Node node3 = Node(4, inputs, weights3);
+    Node node4 = Node(4, inputs, weights4);
+    Node node5 = Node(4, inputs, weights5);
     
     if (node1.activate() > agent.next_gene()) {
       eatingBehavior.behave(agent, 1.0f);
@@ -745,6 +758,9 @@ void step() {
         spawningBehavior.behave(agent, 1.0f);
       }
     }
+    
+    node5.activate();
+    agent.memory1 = node5.value;
   }
     
   // update record model
