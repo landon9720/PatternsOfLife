@@ -33,12 +33,6 @@ EGImage *eg_load_image(const std::string &filename);
 void eg_free_image(EGImage *image);
 void eg_draw_image(EGImage *img, float x, float y, float w, float h);
 
-// audio
-struct EGSound;
-EGSound *eg_load_sound(const std::string &filename);
-void eg_free_sound(EGSound *sound);
-void eg_play_sound(EGSound *sound);
-
 // util
 template<typename T>
 T clamp(const T &x, const T &a, const T &b) {

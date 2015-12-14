@@ -35,9 +35,6 @@ void eg_init(int width, int height, const std::string &title) {
   glEnable(GL_BLEND);
   glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-  Mix_Init(0);
-  Mix_OpenAudio(MIX_DEFAULT_FREQUENCY, MIX_DEFAULT_FORMAT, 2, 1024);
-
   initialized = true;
 }
 
@@ -160,25 +157,6 @@ void eg_draw_image(EGImage *img, float x, float y, float w, float h) {
 
   glDisable(GL_TEXTURE);
   glBindTexture(GL_TEXTURE_2D, 0);
-}
-
-struct EGSound {
-  Mix_Chunk *chunk;
-};
-
-EGSound *eg_load_sound(const std::string &filename) {
-  Mix_Chunk *chunk = Mix_LoadWAV(filename.c_str());
-  assert(chunk != nullptr);
-  return new EGSound { chunk };
-}
-
-void eg_free_sound(EGSound *sound) {
-  Mix_FreeChunk(sound->chunk);
-  delete sound;
-}
-
-void eg_play_sound(EGSound *sound) {
-  Mix_PlayChannel(-1, sound->chunk, 0);
 }
 
 float angle_diff(float a, float b) {

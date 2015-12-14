@@ -165,7 +165,6 @@ static std::uniform_real_distribution<float> fdis(0, 1);
 static std::normal_distribution<float> norm_dist(0, 1);
 
 typedef float gene;
-static float MAX_GENE_VALUE = FLT_MAX;
 
 struct Agent {
   bool out;
