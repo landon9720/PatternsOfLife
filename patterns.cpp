@@ -163,7 +163,6 @@ typedef float gene;
 
 struct Agent {
   bool out;
-  // float behavior_points;
   float health_points;
   float hue;
   int q, r, orientation;
@@ -244,11 +243,13 @@ int select() {
 }
 
 void remove_from_world(Agent &agent) {
-  WorldHex *hex = hex_axial(agent.q, agent.r);
-  assert(hex != 0);
-  assert(hex->agent == &agent);
-  hex->agent = 0;
-  agent.out = true;
+  if (!agent.out) {
+    WorldHex *hex = hex_axial(agent.q, agent.r);
+    assert(hex != 0);
+    assert(hex->agent == &agent);
+    hex->agent = 0;
+    agent.out = true;
+  }
 }
 
 struct Record {
@@ -265,27 +266,6 @@ struct Record {
 };
 
 static Record records[WIDTH];
-
-// static const int NONE_MARK = 0;
-// static const int DEATH_MARK = 1;
-// static const int BIRTH_MARK = 2;
-// static const int EAT_MARK = 3;
-
-// struct Mark {
-//   int type;
-//   int q, r;
-//   int frame;
-// };
-
-// static const int NUM_MARKS = MAX_AGENTS * 3;
-// static Mark marks[NUM_MARKS];
-
-// static int mark_cursor = 0;
-
-// void add_mark(const Mark &mark) {
-//   marks[mark_cursor++] = mark;
-//   mark_cursor %= NUM_MARKS;
-// }
 
 class FoodSensor : public Sensor {
 public:
