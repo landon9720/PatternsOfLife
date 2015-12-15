@@ -664,23 +664,17 @@ void step() {
       
   // update record model
   if (frame % RECORD_SAMPLE_RATE == 0 && num_agents > 0) {
-
     int selected_index = select();
-
     records[records_index].selected_hue = agents[selected_index].hue;
-
     for (int i = 0; i < DNA_SIZE; i++) {
-      records[records_index].dna[i] =
-          agents[selected_index].dna[i]; // memcpy
+      records[records_index].dna[i] = agents[selected_index].dna[i];
     }
-
     for (int i = 0; i < MAX_AGENTS; i++) {
       const Agent &agent = agents[i];
       records[records_index].scores[i] = agent.score;
       records[records_index].hues[i] = agent.hue;
       records[records_index].outs[i] = agent.out;
     }
-
     records_index++;
     records_index %= WIDTH;
   }
@@ -810,67 +804,6 @@ void step() {
                          agent.health_points * 30.0f / MAX_HEALTH_POINTS, 5.0f);
         }
       }
-
-      // // draw day or night cast
-      // if (frame_rate == 1) {
-      //   eg_push_transform();
-      //   eg_reset_transform();
-      //   if (day) {
-      //     eg_set_color(1.0f, 1.0f, 0.0f, 0.1f * fabs(time_of_day_modifier));
-      //   } else {
-      //     eg_set_color(0.0f, 0.0f, 1.0f, 0.1f * fabs(time_of_day_modifier));
-      //   }
-      //   eg_draw_square(0, 0, WIDTH, HEIGHT);
-      //   eg_pop_transform();
-      // }
-
-      // draw annotations (marks)
-    //   for (int i = 0; i < NUM_MARKS; i++) {
-    //     Mark &mark = marks[i];
-    //     int age = frame - mark.frame;
-    //     switch (mark.type) {
-    //     case NONE_MARK:
-    //       continue;
-    //     case DEATH_MARK:
-    //       if (age < 2000) {
-    //         eg_push_transform();
-    //         int x, y;
-    //         axial_to_xy(mark.q, mark.r, x, y);
-    //         eg_translate(x, y);
-    //         eg_set_color(1, 0.2f, 0.2f, 1 - (age / 2000.0f));
-    //         eg_draw_line(-5, -5, 5, 5, 5);
-    //         eg_draw_line(5, -5, -5, 5, 5);
-    //         eg_pop_transform();
-    //       }
-    //       break;
-    //     case BIRTH_MARK:
-    //       if (age < 2000) {
-    //         eg_push_transform();
-    //         int x, y;
-    //         axial_to_xy(mark.q, mark.r, x, y);
-    //         eg_translate(x, y);
-    //         eg_set_color(0.2f, 0.2f, 1, 1 - (age / 2000.0f));
-    //         eg_draw_line(0, 6, 0, -6, 6);
-    //         eg_draw_line(-6, 0, 6, 0, 6);
-    //         eg_pop_transform();
-    //       }
-    //       break;
-    //     case EAT_MARK:
-    //       if (age < 100) {
-    //         eg_push_transform();
-    //         int x, y;
-    //         axial_to_xy(mark.q, mark.r, x, y);
-    //         eg_translate(x, y);
-    //         eg_set_color(0.10f, 0.7f, 0.05f, 1.0f);
-    //         eg_rotate((age / 100.0f) * (4 * 360));
-    //         eg_draw_square(-4, -4, 8, 8);
-    //         eg_pop_transform();
-    //       }
-    //       break;
-    //     default:
-    //       assert(false);
-    //     }
-    //   }
     }
 
     // gene graph
@@ -984,17 +917,4 @@ void unit_tests() {
   axial_add_direction(q, r, 0);
   assert(x == 0 && y == 0 && z == 0 && q == 0 && r == 0);
   
-  
-  // void cubic_to_axial(int x, int y, int z, int &q, int &r) {
-  // void axial_to_cubic(int q, int r, int &x, int &y, int &z) {
-  // WorldHex *hex_axial(int q, int r)
-  // WorldHex *hex_cubic(int x, int y, int z)
-  // void axial_to_xy(int q, int r, int &x, int &y)
-  // void cubic_add(int &x, int &y, int &z, int dx, int dy, int dz)
-  // void cubic_add_direction(int &x, int &y, int &z, int direction) {
-  // void axial_add_direction(int &q, int &r, int direction) {
-  // direction_add(int direction, int rotation)
-  // cubic_distance(int x0, int y0, int z0, int x1, int y1, int z1)
-  // axial_distance(int q0, int r0, int q1, int r1)
-
 }
