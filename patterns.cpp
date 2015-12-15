@@ -20,8 +20,8 @@ struct WorldHex {
 const int HEX_SIZE = 15;
 const int WIDTH = 1280 * 0.9f;
 const int HEIGHT = 720 * 0.9f;
-const int Q = 100;
-const int R = 100;
+const int Q = 1000;
+const int R = 1000;
 const int WORLD_SIZE = Q * R;
 
 const int DNA_SIZE = 42 + 7;
@@ -159,8 +159,6 @@ static std::mt19937 gen(rd());
 static std::uniform_real_distribution<float> fdis(0, 1);
 static std::normal_distribution<float> norm_dist(0, 1);
 
-typedef float gene;
-
 struct Agent {
   bool out;
   float health_points;
@@ -172,7 +170,7 @@ struct Agent {
   float memory2;
   float memory3;
 
-  gene dna[DNA_SIZE];
+  float dna[DNA_SIZE];
 
   Agent() {
     this->out = true;
@@ -201,8 +199,8 @@ struct Agent {
 
   void init_from_parent(Agent *parent) {
     for (int i = 0; i < DNA_SIZE-1; i++) {
-      if (fdis(gen) < 0.01f) {
-        this->dna[i] = parent->dna[i] + (norm_dist(gen) * 0.01f);  
+      if (fdis(gen) < 0.1f) {
+        this->dna[i] = parent->dna[i] + (norm_dist(gen) * 0.1f);  
       } else {
         this->dna[i] = parent->dna[i];
       }
@@ -212,7 +210,7 @@ struct Agent {
 
   int gene_cursor = 0;
   
-  gene next_gene() {
+  float next_gene() {
     assert(gene_cursor < DNA_SIZE);
     return this->dna[gene_cursor++];
   }
@@ -254,7 +252,7 @@ void remove_from_world(Agent &agent) {
 
 struct Record {
   float hues[MAX_AGENTS];
-  gene dna[DNA_SIZE];
+  float dna[DNA_SIZE];
   int scores[MAX_AGENTS];
   bool outs[MAX_AGENTS];
   float selected_hue;
@@ -569,97 +567,40 @@ void step() {
       remove_from_world(agent);
       continue;
     }
-    
-    agent.gene_cursor = 0;
-    float w1 = agent.next_gene();
-    float w2 = agent.next_gene();
-    float w3 = agent.next_gene();
-    float w4 = agent.next_gene();
-    float w5 = agent.next_gene();
-    float w6 = agent.next_gene();
-    float w7 = agent.next_gene();
-    float w8 = agent.next_gene();
-    float w9 = agent.next_gene();
-    float w10 = agent.next_gene();
-    float w11 = agent.next_gene();
-    float w12 = agent.next_gene();
-    float w13 = agent.next_gene();
-    float w14 = agent.next_gene();
-    float w15 = agent.next_gene();
-    float w16 = agent.next_gene();
-    float w17 = agent.next_gene();
-    float w18 = agent.next_gene();
-    float w19 = agent.next_gene();
-    float w20 = agent.next_gene();
-    float w21 = agent.next_gene();
-    float w22 = agent.next_gene();
-    float w23 = agent.next_gene();
-    float w24 = agent.next_gene();
-    float w25 = agent.next_gene();
-    float w26 = agent.next_gene();
-    float w27 = agent.next_gene();
-    float w28 = agent.next_gene();
-    float w29 = agent.next_gene();
-    float w30 = agent.next_gene();
-    float w31 = agent.next_gene();
-    float w32 = agent.next_gene();
-    float w33 = agent.next_gene();
-    float w34 = agent.next_gene();
-    float w35 = agent.next_gene();
-    float w36 = agent.next_gene();
-    float w37 = agent.next_gene();
-    float w38 = agent.next_gene();
-    float w39 = agent.next_gene();
-    float w40 = agent.next_gene();
-    float w41 = agent.next_gene();
-    float w42 = agent.next_gene();
-    
-    float *weights1[6] = { &w1, &w2, &w3, &w4, &w5, &w6};
-    float *weights2[6] = { &w7, &w8, &w9, &w10, &w11, &w12};
-    float *weights3[6] = { &w13, &w14, &w15, &w16, &w17, &w18};
-    float *weights4[6] = { &w19, &w20, &w21, &w22, &w23, &w24};
-    float *weights5[6] = { &w25, &w26, &w27, &w28, &w29, &w30};
-    float *weights6[6] = { &w31, &w32, &w33, &w34, &w35, &w36};
-    float *weights7[6] = { &w37, &w38, &w39, &w40, &w41, &w42};
-    
+ 
     float input1 = foodSensor_here.sense(agent);
     float input2 = foodSensor_ahead1.sense(agent); 
     float input3 = selfHealthPointsSensor.sense(agent); 
     float input4 = agent.memory1;
     float input5 = agent.memory2;
     float input6 = agent.memory3; 
-    float *inputs[6] = { &input1, &input2, &input3, &input4, &input5, &input6 };
+    float inputs[6] = { input1, input2, input3, input4, input5, input6 };
     
-    Node node1 = Node(6, inputs, weights1);
-    Node node2 = Node(6, inputs, weights2);
-    Node node3 = Node(6, inputs, weights3);
-    Node node4 = Node(6, inputs, weights4);
-    Node node5 = Node(6, inputs, weights5);
-    Node node6 = Node(6, inputs, weights6);
-    Node node7 = Node(6, inputs, weights7);
+    float outputs[7] = { };
     
-    if (node1.activate() > agent.next_gene()) {
+    invoke_nn(6, inputs, 7, outputs, agent.dna);
+    
+    agent.gene_cursor = 6 * 7;
+    
+    if (outputs[0] > agent.next_gene()) {
       eatingBehavior.behave(agent, 1.0f);
     }
     
-    if (node2.activate() > agent.next_gene()) {
+    if (outputs[1] > agent.next_gene()) {
       linearBehavior.behave(agent, 1.0f);
     }
     
-    rotationalBehavior.behave(agent, node3.activate() * agent.next_gene());
+    rotationalBehavior.behave(agent, outputs[2] * agent.next_gene());
     
-    if (node4.activate() > agent.next_gene()) {
+    if (outputs[3] > agent.next_gene()) {
       if (agent.health_points > (MAX_HEALTH_POINTS / 2.0f)) {
         spawningBehavior.behave(agent, 1.0f);
       }
     }
     
-    node5.activate();
-    node6.activate();
-    node7.activate();
-    agent.memory1 = node5.value * agent.next_gene();
-    agent.memory2 = node6.value * agent.next_gene();
-    agent.memory3 = node7.value * agent.next_gene();
+    agent.memory1 = outputs[4] * agent.next_gene();
+    agent.memory2 = outputs[5] * agent.next_gene();
+    agent.memory3 = outputs[6] * agent.next_gene();
   }
       
   // update record model
