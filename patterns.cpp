@@ -20,11 +20,12 @@ struct WorldHex {
 const int HEX_SIZE = 15;
 const int WIDTH = 1280 * 0.9f;
 const int HEIGHT = 720 * 0.9f;
-const int Q = 1000;
-const int R = 1000;
+const int Q = 100;
+const int R = 100;
 const int WORLD_SIZE = Q * R;
 
-const int DNA_SIZE = 42 + 7;
+const int DNA_SIZE = (9 * 8) + 8; // INPUTS * OUTPUTS * OUTPUT WEIGHTS
+const int MEMORY_SIZE = 4;
 
 static bool draw_extra_info = false;
 static bool moving = false;
@@ -36,7 +37,6 @@ static float camera_x = HEX_SIZE * R;
 static float camera_y = HEX_SIZE * Q;
 static float camera_zoom = 0.5f;
 static float food_spawn_rate = 0.304482f;
-// static float time_of_day_modifier = 0.0f;
 static int draw_record = 0;
 static int following = -1;
 static int frame = 0;
@@ -45,7 +45,6 @@ static int moving_home_x;
 static int moving_home_y;
 static int num_agents = 50;
 static int records_index = 0;
-// static int time_of_day = 0;
 static int zooming_home;
 
 void cubic_to_axial(int x, int y, int z, int &q, int &r) {
@@ -143,12 +142,9 @@ int direction_add(int direction, int rotation) {
 // }
 
 const float AGENT_SIZE = 20.0f;
-const float FOOD_VALUE = 100.0f;
-// const float MAX_BEHAVIOR_POINTS = 100.0f;
+const float FOOD_VALUE = 50.0f;
 const float MAX_HEALTH_POINTS = 100.0f;
 const int DAY_LENGTH = 2000;
-// const int FORWARD_BLOCKED_DISTANCE_SENSOR_LIMIT = 7;
-// const int FORWARD_FOOD_DISTANCE_SENSOR_LIMIT = 7;
 const int MAX_AGENTS = 1000;
 const int RECORD_SAMPLE_RATE = 100;
 const int NEWPOP_AGENT_COUNT = 20;
@@ -166,10 +162,7 @@ struct Agent {
   int q, r, orientation;
   int score;
   
-  float memory1;
-  float memory2;
-  float memory3;
-
+  float memory[MEMORY_SIZE];
   float dna[DNA_SIZE];
 
   Agent() {
@@ -370,15 +363,6 @@ public:
   }
 };
 
-FoodSensor foodSensor_here(0, 0);
-FoodSensor foodSensor_ahead1(0, 1);
-SelfHealthPointsSensor selfHealthPointsSensor;
-
-RotationalBehavior rotationalBehavior;
-LinearBehavior linearBehavior;
-EatingBehavior eatingBehavior;
-SpawningBehavior spawningBehavior;
-
 void init() {
   eg_init(WIDTH, HEIGHT, "Patterns of Life");
   setlocale(LC_NUMERIC, "");
@@ -567,20 +551,34 @@ void step() {
       remove_from_world(agent);
       continue;
     }
- 
+    
+    FoodSensor foodSensor_here(0, 0);
+    FoodSensor foodSensor_ahead1(0, 1);
+    FoodSensor foodSensor_ahead2(0, 2);
+    FoodSensor foodSensor_ahead3(0, 3);
+    SelfHealthPointsSensor selfHealthPointsSensor;
+    
     float input1 = foodSensor_here.sense(agent);
-    float input2 = foodSensor_ahead1.sense(agent); 
-    float input3 = selfHealthPointsSensor.sense(agent); 
-    float input4 = agent.memory1;
-    float input5 = agent.memory2;
-    float input6 = agent.memory3; 
-    float inputs[6] = { input1, input2, input3, input4, input5, input6 };
+    float input2 = foodSensor_ahead1.sense(agent);
+    float input3 = foodSensor_ahead2.sense(agent);
+    float input4 = foodSensor_ahead3.sense(agent); 
+    float input5 = selfHealthPointsSensor.sense(agent); 
+    float input6 = agent.memory[0];
+    float input7 = agent.memory[1];
+    float input8 = agent.memory[2];
+    float input9 = agent.memory[3];
+    float inputs[9] = { input1, input2, input3, input4, input5, input6, input7, input8, input9 };
     
-    float outputs[7] = { };
+    float outputs[8] = { };
     
-    invoke_nn(6, inputs, 7, outputs, agent.dna);
+    invoke_nn(9, inputs, 8, outputs, agent.dna);
     
-    agent.gene_cursor = 6 * 7;
+    agent.gene_cursor = 9 * 8;
+
+    RotationalBehavior rotationalBehavior;
+    LinearBehavior linearBehavior;
+    EatingBehavior eatingBehavior;
+    SpawningBehavior spawningBehavior;  
     
     if (outputs[0] > agent.next_gene()) {
       eatingBehavior.behave(agent, 1.0f);
@@ -598,9 +596,10 @@ void step() {
       }
     }
     
-    agent.memory1 = outputs[4] * agent.next_gene();
-    agent.memory2 = outputs[5] * agent.next_gene();
-    agent.memory3 = outputs[6] * agent.next_gene();
+    agent.memory[0] = outputs[4] * agent.next_gene();
+    agent.memory[1] = outputs[5] * agent.next_gene();
+    agent.memory[2] = outputs[6] * agent.next_gene();
+    agent.memory[3] = outputs[7] * agent.next_gene();
   }
       
   // update record model
