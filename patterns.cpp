@@ -24,7 +24,7 @@ const int Q = 100;
 const int R = 100;
 const int WORLD_SIZE = Q * R;
 
-const int DNA_SIZE = (9 * 8) + 8; // INPUTS * OUTPUTS * OUTPUT WEIGHTS
+const int DNA_SIZE = 9 * 8 + 8 * 8 + 8;
 const int MEMORY_SIZE = 4;
 
 static bool draw_extra_info = false;
@@ -530,8 +530,11 @@ void step() {
   }
 
   // spawn food
-  if (fdis(gen) < food_spawn_rate) {
-    world[(int)(fdis(gen) * WORLD_SIZE)].food = true;
+  int food_spawn_rate1 = 10;
+  for (int i = 0; i < food_spawn_rate1; ++i) {
+    if (fdis(gen) < food_spawn_rate) {
+      world[(int)(fdis(gen) * WORLD_SIZE)].food = true;
+    }
   }
 
   // behavior model
@@ -569,16 +572,19 @@ void step() {
     float input9 = agent.memory[3];
     float inputs[9] = { input1, input2, input3, input4, input5, input6, input7, input8, input9 };
     
+    float hidden[8] = { };
+    float *weights = agent.dna;
+    invoke_nn(9, inputs, 8, hidden, weights);
+    weights += 9 * 8;
     float outputs[8] = { };
+    invoke_nn(8, hidden, 8, outputs, weights);
     
-    invoke_nn(9, inputs, 8, outputs, agent.dna);
-    
-    agent.gene_cursor = 9 * 8;
-
     RotationalBehavior rotationalBehavior;
     LinearBehavior linearBehavior;
     EatingBehavior eatingBehavior;
-    SpawningBehavior spawningBehavior;  
+    SpawningBehavior spawningBehavior;
+    
+    agent.gene_cursor = 9 * 8 + 8 * 8;  
     
     if (outputs[0] > agent.next_gene()) {
       eatingBehavior.behave(agent, 1.0f);
@@ -748,21 +754,21 @@ void step() {
 
     // gene graph
     if (draw_record % 4 == 1) {
+      float interval_h = HEIGHT / (float)DNA_SIZE;
       for (int rx = 0; rx < WIDTH; rx++) {
         const Record &record = records[(records_index + rx) % WIDTH];
-        float y = 0.0f;
-        float total = 0.0f;
+        float mx = 0.0f;
         for (int wi = 0; wi < DNA_SIZE; wi++) {
-          total += fabs(record.dna[wi]);
+          mx = fmax(mx, record.dna[wi]);
         }
+        float y = 0.0f;
         for (int wi = 0; wi < DNA_SIZE; wi++) {
           float r, g, b;
-          hsv_to_rgb(record.selected_hue, 1.0, wi % 2 == 0 ? 0.0 : 1.0, &r, &g,
-                     &b);
+          hsv_to_rgb(record.selected_hue, 1.0, wi % 2 == 0 ? 0.0 : 1.0, &r, &g, &b);
           eg_set_color(r, g, b, 1.0f);
-          float h = (fabs(record.dna[wi]) / total) * HEIGHT * 2;
+          float h = (fabs(record.dna[wi]) / mx) * interval_h;
           eg_draw_line(rx, y, rx, y + h, 1.5f);
-          y += h;
+          y += interval_h;
         }
       }
     }
