@@ -764,7 +764,7 @@ void step() {
         float y = 0.0f;
         for (int wi = 0; wi < DNA_SIZE; wi++) {
           float r, g, b;
-          hsv_to_rgb(record.selected_hue, 1.0, wi % 2 == 0 ? 0.0 : 1.0, &r, &g, &b);
+          hsv_to_rgb(record.selected_hue, 1.0, 1.0, &r, &g, &b);
           eg_set_color(r, g, b, 1.0f);
           float h = (fabs(record.dna[wi]) / mx) * interval_h;
           eg_draw_line(rx, y, rx, y + h, 1.5f);
