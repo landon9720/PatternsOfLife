@@ -13,7 +13,7 @@ public:
 };
 
 struct WorldHex {
-  bool food;
+  char food;
   Agent *agent;
 };
 
@@ -24,7 +24,7 @@ const int Q = 100;
 const int R = 100;
 const int WORLD_SIZE = Q * R;
 
-const int DNA_SIZE = 9 * 8 + 8 * 8 + 8;
+const int DNA_SIZE = 10 * 8 + 8 * 9 + 9;
 const int MEMORY_SIZE = 4;
 
 static bool draw_extra_info = false;
@@ -266,8 +266,34 @@ public:
       cubic_add_direction(x, y, z, direction);
     }
     WorldHex *hex = hex_cubic(x, y, z);
-    if (hex != 0 && hex->food) {
+    if (hex != 0 && hex->food > 0) {
       return 1.0f;
+    } else {
+      return 0.0f;
+    }
+  }
+
+private:
+  int relative_direction;
+  int distance;
+};
+
+class AgentSensor : public Sensor {
+public:
+  AgentSensor(int relative_direction, int distance) {
+    this->relative_direction = relative_direction;
+    this->distance = distance;
+  }
+  virtual float sense(const Agent &agent) {
+    int direction = direction_add(agent.orientation, relative_direction);
+    int x, y, z;
+    axial_to_cubic(agent.q, agent.r, x, y, z);
+    for (int j = 0; j < distance; j++) {
+      cubic_add_direction(x, y, z, direction);
+    }
+    WorldHex *hex = hex_cubic(x, y, z);
+    if (hex != 0 && hex->agent) {
+      return hex->agent->hue;
     } else {
       return 0.0f;
     }
@@ -314,10 +340,28 @@ public:
       y = y0;
       z = z0;
       agent.health_points -= .5f;
-      agent.waiting += 1;
+      agent.waiting += 5;
     }
     cubic_to_axial(x, y, z, agent.q, agent.r);
     hex_axial(agent.q, agent.r)->agent = &agent;
+  }
+};
+
+class KillBehavior : public Behavior {
+public:
+  virtual void behave(Agent &agent, float perceptron_output) {
+    int x, y, z;
+    axial_to_cubic(agent.q, agent.r, x, y, z);
+    int targetx = x, targety = y, targetz = z;
+    cubic_add_direction(targetx, targety, targetz, agent.orientation);
+    WorldHex *hex = hex_cubic(targetx, targety, targetz);
+    if (hex != 0 && hex->agent) {
+      Agent *target = hex->agent;
+      remove_from_world(*target);
+      hex->food = 2;
+      agent.health_points -= .5f;
+      agent.waiting += 5;
+    }
   }
 };
 
@@ -325,11 +369,11 @@ class EatingBehavior : public Behavior {
 public:
   virtual void behave(Agent &agent, float perceptron_output) {
     WorldHex *hex = hex_axial(agent.q, agent.r);
-    if (hex != 0 && hex->food) {
-      hex->food = false;
+    if (hex != 0 && hex->food > 0) {
+      hex->food = 0;
       agent.health_points = min(MAX_HEALTH_POINTS, agent.health_points + FOOD_VALUE);
       agent.score++;
-      agent.waiting += 4;
+      agent.waiting += 50;
     }
   }
 };
@@ -356,7 +400,7 @@ public:
         agents[new_index].orientation = agent.orientation;
         hex_axial(agents[new_index].q, agents[new_index].r)->agent = &agents[new_index];
         agent.health_points = agents[new_index].health_points = agent.health_points / 4.0f;
-        agent.waiting += 5;
+        agent.waiting += 100;
       }
     }
   }
@@ -437,7 +481,7 @@ void step() {
         break;
       case SDL_SCANCODE_C:
         for (int i = 0; i < WORLD_SIZE; i++) {
-          world[i].food = false;
+          world[i].food = 0;
         }
         nudge = true;
         break;
@@ -532,7 +576,7 @@ void step() {
   int food_spawn_rate1 = 10;
   for (int i = 0; i < food_spawn_rate1; ++i) {
     if (fdis(gen) < food_spawn_rate) {
-      world[(int)(fdis(gen) * WORLD_SIZE)].food = true;
+      world[(int)(fdis(gen) * WORLD_SIZE)].food = 1;
     }
   }
 
@@ -563,28 +607,31 @@ void step() {
     FoodSensor foodSensor_ahead1(0, 1);
     FoodSensor foodSensor_ahead2(0, 2);
     FoodSensor foodSensor_ahead3(0, 3);
+    AgentSensor agentSensor_ahead1(0, 1);
     SelfHealthPointsSensor selfHealthPointsSensor;
     
     float input1 = foodSensor_here.sense(agent);
     float input2 = foodSensor_ahead1.sense(agent);
     float input3 = foodSensor_ahead2.sense(agent);
     float input4 = foodSensor_ahead3.sense(agent); 
-    float input5 = selfHealthPointsSensor.sense(agent); 
-    float input6 = agent.memory[0];
-    float input7 = agent.memory[1];
-    float input8 = agent.memory[2];
-    float input9 = agent.memory[3];
-    float inputs[9] = { input1, input2, input3, input4, input5, input6, input7, input8, input9 };
+    float input5 = agentSensor_ahead1.sense(agent);
+    float input6 = selfHealthPointsSensor.sense(agent); 
+    float input7 = agent.memory[0];
+    float input8 = agent.memory[1];
+    float input9 = agent.memory[2];
+    float input10 = agent.memory[3];
+    float inputs[10] = { input1, input2, input3, input4, input5, input6, input7, input8, input9, input10 };
     
     float hidden[8] = { };
     float *weights = agent.dna;
-    invoke_nn(9, inputs, 8, hidden, weights);
-    weights += 9 * 8;
-    float outputs[8] = { };
-    invoke_nn(8, hidden, 8, outputs, weights);
+    invoke_nn(10, inputs, 8, hidden, weights);
+    weights += 10 * 9;
+    float outputs[9] = { };
+    invoke_nn(8, hidden, 9, outputs, weights);
     
     RotationalBehavior rotationalBehavior;
     LinearBehavior linearBehavior;
+    KillBehavior killBehavior;
     EatingBehavior eatingBehavior;
     SpawningBehavior spawningBehavior;
     
@@ -598,18 +645,22 @@ void step() {
       linearBehavior.behave(agent, 1.0f);
     }
     
-    rotationalBehavior.behave(agent, outputs[2] * *gene_cursor++);
+    if (outputs[2] > *gene_cursor++) {
+      killBehavior.behave(agent, 1.0f);
+    }
     
-    if (outputs[3] > *gene_cursor++) {
+    rotationalBehavior.behave(agent, outputs[3] * *gene_cursor++);
+    
+    if (outputs[4] > *gene_cursor++) {
       if (agent.health_points > (MAX_HEALTH_POINTS / 2.0f)) {
         spawningBehavior.behave(agent, 1.0f);
       }
     }
     
-    agent.memory[0] = outputs[4] * *gene_cursor++;
-    agent.memory[1] = outputs[5] * *gene_cursor++;
-    agent.memory[2] = outputs[6] * *gene_cursor++;
-    agent.memory[3] = outputs[7] * *gene_cursor++;
+    agent.memory[0] = outputs[5] * *gene_cursor++;
+    agent.memory[1] = outputs[6] * *gene_cursor++;
+    agent.memory[2] = outputs[7] * *gene_cursor++;
+    agent.memory[3] = outputs[8] * *gene_cursor++;
   }
       
   // update record model
@@ -697,9 +748,11 @@ void step() {
           eg_scale(HEX_SIZE, HEX_SIZE);
 
           // draw foods
-          if (hex->food) {
+          if (hex->food > 0) {
             eg_scale(0.5f, 0.5f);
             eg_set_color(0.05f, 0.8f, 0.05f, 1.0f);
+            if (hex->food == 2)
+              eg_set_color(0.8f, 0.05f, 0.05f, 1.0f);
             eg_draw_square(-0.5f, -0.5, 1, 1);
           }
 
@@ -723,7 +776,7 @@ void step() {
         hsv_to_rgb(agent.hue, 1.0f, 1.0f, &r, &g, &b);
         eg_set_color(r, g, b, 1.0f);
         float angle = agent.orientation / 6.0f * 2 * M_PI + (M_PI / 6.0f);
-        float orientation_line_length = 20.0;
+        float orientation_line_length = 30.0;
         eg_draw_line(x, y, x + (float)cos(angle) * orientation_line_length,
                      y + (float)sin(angle) * orientation_line_length,
                       10.0f);
