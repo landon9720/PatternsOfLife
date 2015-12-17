@@ -142,12 +142,11 @@ int direction_add(int direction, int rotation) {
 // }
 
 const float AGENT_SIZE = 20.0f;
-const float FOOD_VALUE = 50.0f;
+const float FOOD_VALUE = 10.0f;
 const float MAX_HEALTH_POINTS = 100.0f;
 const int DAY_LENGTH = 2000;
 const int MAX_AGENTS = 1000;
 const int RECORD_SAMPLE_RATE = 100;
-const int NEWPOP_AGENT_COUNT = 20;
 const int TURBO_RATE = 307;
 
 static std::random_device rd;
@@ -371,7 +370,8 @@ public:
     WorldHex *hex = hex_axial(agent.q, agent.r);
     if (hex != 0 && hex->food > 0) {
       hex->food = 0;
-      agent.health_points = min(MAX_HEALTH_POINTS, agent.health_points + FOOD_VALUE);
+      float fv = hex->food == 1 ? FOOD_VALUE : FOOD_VALUE * 10.0f;
+      agent.health_points = min(MAX_HEALTH_POINTS, agent.health_points + fv);
       agent.score++;
       agent.waiting += 50;
     }
@@ -555,20 +555,15 @@ void step() {
   if (paused && !nudge)
     return;
   nudge = false;
-
-  // respawn agents 0-n
-  bool allout = true;
-  for (int i = 0; i < num_agents; i++) {
-    if (!agents[i].out) {
-      allout = false;
-      break;
-    }
-  }
-  if (allout) {
-    for (int i = 0; i < NEWPOP_AGENT_COUNT; i++) {
+  
+  if (frame % 100 == 0) {
+    for (int i = 0; i < num_agents; i++) {
       Agent &agent = agents[i];
-      agent.randomize();
-      agent.reset_agent();
+      if (agent.out) {
+        agent.randomize();
+        agent.reset_agent();
+        break;
+      }
     }
   }
 
