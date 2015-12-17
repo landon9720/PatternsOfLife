@@ -161,6 +161,7 @@ struct Agent {
   float hue;
   int q, r, orientation;
   int score;
+  int waiting;
   
   float memory[MEMORY_SIZE];
   float dna[DNA_SIZE];
@@ -290,9 +291,11 @@ public:
     if (perceptron_output < 0.5f) {
       agent.orientation = direction_add(agent.orientation, +1);
       agent.health_points -= .5f;
+      agent.waiting += 1;
     } else if (perceptron_output > 0.5f) {
       agent.orientation = direction_add(agent.orientation, -1);
       agent.health_points -= .5f;
+      agent.waiting += 1;
     }
   }
 };
@@ -311,6 +314,7 @@ public:
       y = y0;
       z = z0;
       agent.health_points -= .5f;
+      agent.waiting += 1;
     }
     cubic_to_axial(x, y, z, agent.q, agent.r);
     hex_axial(agent.q, agent.r)->agent = &agent;
@@ -325,6 +329,7 @@ public:
       hex->food = false;
       agent.health_points = min(MAX_HEALTH_POINTS, agent.health_points + FOOD_VALUE);
       agent.score++;
+      agent.waiting += 4;
     }
   }
 };
@@ -351,6 +356,7 @@ public:
         agents[new_index].orientation = agent.orientation;
         hex_axial(agents[new_index].q, agents[new_index].r)->agent = &agents[new_index];
         agent.health_points = agents[new_index].health_points = agent.health_points / 4.0f;
+        agent.waiting += 5;
       }
     }
   }
@@ -541,6 +547,11 @@ void step() {
 
     // decay health as a function of time
     agent.health_points += -0.1f;
+    
+    if (agent.waiting > 0) {
+      agent.waiting--;
+      continue;
+    }
 
     // death
     if (agent.health_points <= 0.0f) {
