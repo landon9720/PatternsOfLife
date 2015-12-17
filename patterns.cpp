@@ -800,8 +800,7 @@ void step() {
         float y = 0;
         for (int i = 0; i < num_agents; ++i) {
           float r, g, b;
-          hsv_to_rgb(record.hues[i], 1.00f, record.outs[i] ? 0.5f : 1.0f, &r,
-                     &g, &b);
+          hsv_to_rgb(record.hues[i], 1.00f, record.outs[i] ? 0.0f : 1.0f, &r, &g, &b);
           eg_set_color(r, g, b, 1.0f);
           eg_draw_line(rx, y, rx, y + h, 1.0f);
           y += h;
