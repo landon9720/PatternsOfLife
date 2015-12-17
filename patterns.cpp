@@ -200,13 +200,6 @@ struct Agent {
     }
     this->hue = parent->hue;
   }
-
-  int gene_cursor = 0;
-  
-  float next_gene() {
-    assert(gene_cursor < DNA_SIZE);
-    return this->dna[gene_cursor++];
-  }
 };
 
 Agent agents[MAX_AGENTS];
@@ -584,28 +577,28 @@ void step() {
     EatingBehavior eatingBehavior;
     SpawningBehavior spawningBehavior;
     
-    agent.gene_cursor = 9 * 8 + 8 * 8;  
+    float *gene_cursor = agent.dna + (9 * 8 + 8 * 8);  
     
-    if (outputs[0] > agent.next_gene()) {
+    if (outputs[0] > *gene_cursor++) {
       eatingBehavior.behave(agent, 1.0f);
     }
     
-    if (outputs[1] > agent.next_gene()) {
+    if (outputs[1] > *gene_cursor++) {
       linearBehavior.behave(agent, 1.0f);
     }
     
-    rotationalBehavior.behave(agent, outputs[2] * agent.next_gene());
+    rotationalBehavior.behave(agent, outputs[2] * *gene_cursor++);
     
-    if (outputs[3] > agent.next_gene()) {
+    if (outputs[3] > *gene_cursor++) {
       if (agent.health_points > (MAX_HEALTH_POINTS / 2.0f)) {
         spawningBehavior.behave(agent, 1.0f);
       }
     }
     
-    agent.memory[0] = outputs[4] * agent.next_gene();
-    agent.memory[1] = outputs[5] * agent.next_gene();
-    agent.memory[2] = outputs[6] * agent.next_gene();
-    agent.memory[3] = outputs[7] * agent.next_gene();
+    agent.memory[0] = outputs[4] * *gene_cursor++;
+    agent.memory[1] = outputs[5] * *gene_cursor++;
+    agent.memory[2] = outputs[6] * *gene_cursor++;
+    agent.memory[3] = outputs[7] * *gene_cursor++;
   }
       
   // update record model
