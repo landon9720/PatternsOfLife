@@ -142,8 +142,8 @@ int direction_add(int direction, int rotation) {
 // }
 
 const float AGENT_SIZE = 20.0f;
-const float FOOD_VALUE = 10.0f;
-const float MAX_HEALTH_POINTS = 100.0f;
+const float FOOD_VALUE = 100.0f;
+const float MAX_HEALTH_POINTS = 1000.0f;
 const int DAY_LENGTH = 2000;
 const int MAX_AGENTS = 1000;
 const int RECORD_SAMPLE_RATE = 100;
@@ -180,6 +180,7 @@ struct Agent {
     this->health_points = MAX_HEALTH_POINTS;
     this->score = 0;
     this->out = false;
+    this->waiting = 0;
     WorldHex *hex;
     do {
       this->q = Q * fdis(gen);
@@ -193,7 +194,7 @@ struct Agent {
   void init_from_parent(Agent *parent) {
     for (int i = 0; i < DNA_SIZE-1; i++) {
       if (fdis(gen) < 0.1f) {
-        this->dna[i] = parent->dna[i] + (norm_dist(gen) * 0.1f);  
+        this->dna[i] = parent->dna[i] + (norm_dist(gen) * 0.2f);  
       } else {
         this->dna[i] = parent->dna[i];
       }
@@ -315,11 +316,9 @@ public:
   virtual void behave(Agent &agent, float perceptron_output) { 
     if (perceptron_output < 0.5f) {
       agent.orientation = direction_add(agent.orientation, +1);
-      agent.health_points -= .5f;
       agent.waiting += 1;
     } else if (perceptron_output > 0.5f) {
       agent.orientation = direction_add(agent.orientation, -1);
-      agent.health_points -= .5f;
       agent.waiting += 1;
     }
   }
@@ -338,7 +337,6 @@ public:
       x = x0;
       y = y0;
       z = z0;
-      agent.health_points -= .5f;
       agent.waiting += 5;
     }
     cubic_to_axial(x, y, z, agent.q, agent.r);
@@ -358,8 +356,7 @@ public:
       Agent *target = hex->agent;
       remove_from_world(*target);
       hex->food = 2;
-      agent.health_points -= .5f;
-      agent.waiting += 5;
+      agent.waiting += 100;
     }
   }
 };
@@ -399,8 +396,8 @@ public:
         agents[new_index].r = new_r;
         agents[new_index].orientation = agent.orientation;
         hex_axial(agents[new_index].q, agents[new_index].r)->agent = &agents[new_index];
-        agent.health_points = agents[new_index].health_points = agent.health_points / 4.0f;
-        agent.waiting += 100;
+        agent.waiting += 500;
+        agents[new_index].waiting += 500;
       }
     }
   }
@@ -585,7 +582,7 @@ void step() {
     }
 
     // decay health as a function of time
-    agent.health_points += -0.1f;
+    agent.health_points += -1.0f;
     
     if (agent.waiting > 0) {
       agent.waiting--;
@@ -620,7 +617,7 @@ void step() {
     float hidden[8] = { };
     float *weights = agent.dna;
     invoke_nn(10, inputs, 8, hidden, weights);
-    weights += 10 * 9;
+    weights += 10 * 8;
     float outputs[9] = { };
     invoke_nn(8, hidden, 9, outputs, weights);
     
@@ -630,32 +627,32 @@ void step() {
     EatingBehavior eatingBehavior;
     SpawningBehavior spawningBehavior;
     
-    float *gene_cursor = agent.dna + (9 * 8 + 8 * 8);  
+    weights += (10 * 8 + 8 * 9);  
     
-    if (outputs[0] > *gene_cursor++) {
+    if (outputs[0] > *weights++) {
       eatingBehavior.behave(agent, 1.0f);
     }
     
-    if (outputs[1] > *gene_cursor++) {
+    if (outputs[1] > *weights++) {
       linearBehavior.behave(agent, 1.0f);
     }
     
-    if (outputs[2] > *gene_cursor++) {
+    if (outputs[2] > *weights++) {
       killBehavior.behave(agent, 1.0f);
     }
     
-    rotationalBehavior.behave(agent, outputs[3] * *gene_cursor++);
+    rotationalBehavior.behave(agent, outputs[3] * *weights++);
     
-    if (outputs[4] > *gene_cursor++) {
-      if (agent.health_points > (MAX_HEALTH_POINTS / 2.0f)) {
-        spawningBehavior.behave(agent, 1.0f);
-      }
+    if (outputs[4] > *weights++) {
+      spawningBehavior.behave(agent, 1.0f);
     }
     
-    agent.memory[0] = outputs[5] * *gene_cursor++;
-    agent.memory[1] = outputs[6] * *gene_cursor++;
-    agent.memory[2] = outputs[7] * *gene_cursor++;
-    agent.memory[3] = outputs[8] * *gene_cursor++;
+    agent.memory[0] = outputs[5] * *weights++;
+    agent.memory[1] = outputs[6] * *weights++;
+    agent.memory[2] = outputs[7] * *weights++;
+    agent.memory[3] = outputs[8] * *weights++;
+    
+    assert(weights = agent.dna + DNA_SIZE);
   }
       
   // update record model
@@ -798,8 +795,7 @@ void step() {
           } else {
             eg_set_color(0.8f, 0.3f, 0.3f, 0.8f);
           }
-          eg_draw_square(x - 15.0f, y + 12.0f,
-                         agent.health_points * 30.0f / MAX_HEALTH_POINTS, 5.0f);
+          eg_draw_square(x - 15.0f, y + 12.0f, agent.health_points * 30.0f / MAX_HEALTH_POINTS, 5.0f);
         }
       }
     }
