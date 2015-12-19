@@ -20,11 +20,11 @@ struct WorldHex {
 const int HEX_SIZE = 50;
 const int WIDTH = 1280;
 const int HEIGHT = 800;
-const int Q = 100;
-const int R = 100;
+const int Q = 120;
+const int R = 120;
 const int WORLD_SIZE = Q * R;
 
-const int DNA_SIZE = 10 * 8 + 8 * 9 + 9;
+const int DNA_SIZE = 14 * 8 + 8 * 9 + 9;
 const int MEMORY_SIZE = 4;
 
 static bool draw_extra_info = false;
@@ -73,11 +73,9 @@ WorldHex *hex_cubic(int x, int y, int z) {
   return hex_axial(q, r);
 }
 
-float ssqrtf3 = sqrtf(3.0f);
-
 void axial_to_xy(int q, int r, int &x, int &y) {
   x = HEX_SIZE * 3.0f / 2.0f * q;
-  y = HEX_SIZE * ssqrtf3 * (r + q / 2.0f);
+  y = HEX_SIZE * sqrtf(3.0f) * (r + q / 2.0f);
 }
 
 void cubic_add(int &x, int &y, int &z, int dx, int dy, int dz) {
@@ -336,10 +334,10 @@ public:
       x = x0;
       y = y0;
       z = z0;
-      agent.waiting += 5;
     }
     cubic_to_axial(x, y, z, agent.q, agent.r);
     hex_axial(agent.q, agent.r)->agent = &agent;
+    agent.waiting += 2;
   }
 };
 
@@ -354,8 +352,8 @@ public:
     if (hex != 0 && hex->agent) {
       Agent *target = hex->agent;
       remove_from_world(*target);
-      hex->food = 2;
-      agent.waiting += 100;
+      hex->food |= 2;
+      agent.waiting += 40;
     }
   }
 };
@@ -365,12 +363,12 @@ public:
   virtual void behave(Agent &agent, float perceptron_output) {
     WorldHex *hex = hex_axial(agent.q, agent.r);
     if (hex != 0 && hex->food > 0) {
-      hex->food = 0;
+      hex->food -= 1;
       float fv = hex->food == 1 ? FOOD_VALUE : FOOD_VALUE * 2.0f;
       agent.health_points = min(MAX_HEALTH_POINTS, agent.health_points + fv);
       agent.score++;
-      agent.waiting += 50;
     }
+    agent.waiting += 10;
   }
 };
 
@@ -395,10 +393,10 @@ public:
         agents[new_index].r = new_r;
         agents[new_index].orientation = agent.orientation;
         hex_axial(agents[new_index].q, agents[new_index].r)->agent = &agents[new_index];
-        agent.waiting += 500;
-        agents[new_index].waiting += 500;
+        agents[new_index].waiting += 200;
       }
     }
+    agent.waiting += 200;
   }
 };
 
@@ -563,9 +561,9 @@ void step() {
     }
   }
 
-  // spawn food
+  // grow food
   if (fdis(gen) < food_spawn_rate) {
-    world[(int)(fdis(gen) * WORLD_SIZE)].food = 1;
+    world[(int)(fdis(gen) * WORLD_SIZE)].food |= 1;
   }
 
   // behavior model
@@ -595,6 +593,10 @@ void step() {
     FoodSensor foodSensor_ahead1(0, 1);
     FoodSensor foodSensor_ahead2(0, 2);
     FoodSensor foodSensor_ahead3(0, 3);
+    FoodSensor foodSensor_left1(1, 1);
+    FoodSensor foodSensor_left2(1, 2);
+    FoodSensor foodSensor_right1(-1, 1);
+    FoodSensor foodSensor_right2(-1, 2);
     AgentSensor agentSensor_ahead1(0, 1);
     SelfHealthPointsSensor selfHealthPointsSensor;
     
@@ -602,18 +604,21 @@ void step() {
     float input2 = foodSensor_ahead1.sense(agent);
     float input3 = foodSensor_ahead2.sense(agent);
     float input4 = foodSensor_ahead3.sense(agent); 
-    float input5 = agentSensor_ahead1.sense(agent);
-    float input6 = selfHealthPointsSensor.sense(agent); 
-    float input7 = agent.memory[0];
-    float input8 = agent.memory[1];
-    float input9 = agent.memory[2];
-    float input10 = agent.memory[3];
-    float inputs[10] = { input1, input2, input3, input4, input5, input6, input7, input8, input9, input10 };
+    float input5 = foodSensor_left1.sense(agent);
+    float input6 = foodSensor_left2.sense(agent); 
+    float input7 = foodSensor_right1.sense(agent);
+    float input8 = foodSensor_right2.sense(agent); 
+    float input9 = selfHealthPointsSensor.sense(agent); 
+    float input10 = agent.memory[0];
+    float input11 = agent.memory[1];
+    float input12 = agent.memory[2];
+    float input13 = agent.memory[3];
+    float inputs[13] = { input1, input2, input3, input4, input5, input6, input7, input8, input9, input10, input11, input12, input13 };
     
     float hidden[8] = { };
     float *weights = agent.dna;
-    invoke_nn(10, inputs, 8, hidden, weights);
-    weights += 10 * 8;
+    invoke_nn(13, inputs, 8, hidden, weights);
+    weights += 13 * 8;
     float outputs[9] = { };
     invoke_nn(8, hidden, 9, outputs, weights);
     
@@ -623,7 +628,7 @@ void step() {
     EatingBehavior eatingBehavior;
     SpawningBehavior spawningBehavior;
     
-    weights += (10 * 8 + 8 * 9);  
+    weights += (13 * 8 + 8 * 9);  
     
     if (outputs[0] > *weights++) {
       eatingBehavior.behave(agent, 1.0f);
@@ -719,8 +724,8 @@ void step() {
           eg_translate(x, y);
           eg_scale(HEX_SIZE * 0.94F, HEX_SIZE * 0.94F);
 
-          if (hex->food == 0)
-            eg_set_color(0.1f, 0.1f, 0.05f, 1.0f);
+          if (!(hex->food & 1))
+            eg_set_color(0.1f, 0.2f, 0.05f, 1.0f);
           else
             eg_set_color(0.05f, 0.3f, 0.05f, 1.0f);
           
@@ -733,7 +738,7 @@ void step() {
           glVertex2f(sin((M_PI * 6.5f) / 3.0f), cos((M_PI * 6.5f) / 3.0f));
           glEnd();          
           
-          if (hex->food == 2) { 
+          if (hex->food & 2) { 
             eg_scale(.4f, .4f);
             eg_set_color(0.7f, 0.0f, 0.1f, 1.0f);
             glBegin(GL_POLYGON);
