@@ -17,9 +17,9 @@ struct WorldHex {
   Agent *agent;
 };
 
-const int HEX_SIZE = 15;
-const int WIDTH = 1280 * 0.9f;
-const int HEIGHT = 720 * 0.9f;
+const int HEX_SIZE = 50;
+const int WIDTH = 1280;
+const int HEIGHT = 800;
 const int Q = 100;
 const int R = 100;
 const int WORLD_SIZE = Q * R;
@@ -35,7 +35,7 @@ static bool quit = false;
 static bool zooming = false;
 static float camera_x = HEX_SIZE * R;
 static float camera_y = HEX_SIZE * Q;
-static float camera_zoom = 0.5f;
+static float camera_zoom = 1.0f;
 static float food_spawn_rate = 0.304482f;
 static int draw_record = 0;
 static int following = -1;
@@ -141,7 +141,6 @@ int direction_add(int direction, int rotation) {
 //   return cubic_distance(x0, y0, z0, x1, y1, z1);
 // }
 
-const float AGENT_SIZE = 20.0f;
 const float FOOD_VALUE = 100.0f;
 const float MAX_HEALTH_POINTS = 1000.0f;
 const int DAY_LENGTH = 2000;
@@ -367,7 +366,7 @@ public:
     WorldHex *hex = hex_axial(agent.q, agent.r);
     if (hex != 0 && hex->food > 0) {
       hex->food = 0;
-      float fv = hex->food == 1 ? FOOD_VALUE : FOOD_VALUE * 10.0f;
+      float fv = hex->food == 1 ? FOOD_VALUE : FOOD_VALUE * 2.0f;
       agent.health_points = min(MAX_HEALTH_POINTS, agent.health_points + fv);
       agent.score++;
       agent.waiting += 50;
@@ -565,11 +564,8 @@ void step() {
   }
 
   // spawn food
-  int food_spawn_rate1 = 10;
-  for (int i = 0; i < food_spawn_rate1; ++i) {
-    if (fdis(gen) < food_spawn_rate) {
-      world[(int)(fdis(gen) * WORLD_SIZE)].food = 1;
-    }
+  if (fdis(gen) < food_spawn_rate) {
+    world[(int)(fdis(gen) * WORLD_SIZE)].food = 1;
   }
 
   // behavior model
@@ -713,22 +709,6 @@ void step() {
       eg_translate((float)(WIDTH / 2) / camera_zoom,
                    (float)(HEIGHT / 2) / camera_zoom);
 
-      int border_x0, border_y0, border_x1, border_y1, border_x2, border_y2,
-          border_x3, border_y3;
-      axial_to_xy(0, 0, border_x0, border_y0);
-      axial_to_xy(Q - 1, 0, border_x1, border_y1);
-      axial_to_xy(Q - 1, R - 1, border_x2, border_y2);
-      axial_to_xy(0, R - 1, border_x3, border_y3);
-
-      eg_set_color(1, 1, 1, 0.1f);
-      glLineWidth(1);
-      glBegin(GL_POLYGON);
-      glVertex2f(border_x0, border_y0);
-      glVertex2f(border_x1, border_y1);
-      glVertex2f(border_x2, border_y2);
-      glVertex2f(border_x3, border_y3);
-      glEnd();
-
       for (int q = 0; q < Q; q++) {
         for (int r = 0; r < R; r++) {
           WorldHex *hex = hex_axial(q, r);
@@ -737,17 +717,33 @@ void step() {
           int x, y;
           axial_to_xy(q, r, x, y);
           eg_translate(x, y);
-          eg_scale(HEX_SIZE, HEX_SIZE);
+          eg_scale(HEX_SIZE * 0.94F, HEX_SIZE * 0.94F);
 
-          // draw foods
-          if (hex->food > 0) {
-            eg_scale(0.5f, 0.5f);
-            eg_set_color(0.05f, 0.8f, 0.05f, 1.0f);
-            if (hex->food == 2)
-              eg_set_color(0.8f, 0.05f, 0.05f, 1.0f);
-            eg_draw_square(-0.5f, -0.5, 1, 1);
+          if (hex->food == 0)
+            eg_set_color(0.1f, 0.1f, 0.05f, 1.0f);
+          else
+            eg_set_color(0.05f, 0.3f, 0.05f, 1.0f);
+          
+          glBegin(GL_POLYGON);
+          glVertex2f(sin((M_PI * 1.5f) / 3.0f), cos((M_PI * 1.5f) / 3.0f));
+          glVertex2f(sin((M_PI * 2.5f) / 3.0f), cos((M_PI * 2.5f) / 3.0f));
+          glVertex2f(sin((M_PI * 3.5f) / 3.0f), cos((M_PI * 3.5f) / 3.0f));
+          glVertex2f(sin((M_PI * 4.5f) / 3.0f), cos((M_PI * 4.5f) / 3.0f));
+          glVertex2f(sin((M_PI * 5.5f) / 3.0f), cos((M_PI * 5.5f) / 3.0f));
+          glVertex2f(sin((M_PI * 6.5f) / 3.0f), cos((M_PI * 6.5f) / 3.0f));
+          glEnd();          
+          
+          if (hex->food == 2) { 
+            eg_scale(.4f, .4f);
+            eg_set_color(0.7f, 0.0f, 0.1f, 1.0f);
+            glBegin(GL_POLYGON);
+            glVertex2f(sin((2 * M_PI * 1.0f) / 3.0f), cos((2 * M_PI * 1.0f) / 3.0f));
+            glVertex2f(sin((2 * M_PI * 2.0f) / 3.0f), cos((2 * M_PI * 2.0f) / 3.0f));
+            glVertex2f(sin((2 * M_PI * 3.0f) / 3.0f), cos((2 * M_PI * 3.0f) / 3.0f));
+            glEnd();
+            eg_pop_transform();
           }
-
+          
           eg_pop_transform();
         }
       }
@@ -768,15 +764,18 @@ void step() {
         hsv_to_rgb(agent.hue, 1.0f, 1.0f, &r, &g, &b);
         eg_set_color(r, g, b, 1.0f);
         float angle = agent.orientation / 6.0f * 2 * M_PI + (M_PI / 6.0f);
-        float orientation_line_length = 30.0;
-        eg_draw_line(x, y, x + (float)cos(angle) * orientation_line_length,
+        float orientation_line_length = 25.0;
+        eg_draw_line(x, 
+                     y, 
+                     x + (float)cos(angle) * orientation_line_length,
                      y + (float)sin(angle) * orientation_line_length,
-                      10.0f);
+                     15.0f);
 
         // agent
         eg_push_transform();
         eg_translate(x, y);
         eg_rotate((agent.orientation / 6.0f) * 360.0f + (360 / 12));
+        const float AGENT_SIZE = 20.0f;
         float buddy_size = AGENT_SIZE * 1.0f;
         eg_scale(buddy_size, buddy_size);
         eg_set_color(0.9f, 0.9f, 0.9f, 1.0f);

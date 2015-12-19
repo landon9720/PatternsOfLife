@@ -16,16 +16,15 @@ static SDL_Window *window = nullptr;
 static const unsigned char *keystate = nullptr;
 
 void eg_init(int width, int height, const std::string &title) {
-  SDL_Init(SDL_INIT_VIDEO);
+  SDL_Init(SDL_INIT_EVERYTHING);
+  
   window = SDL_CreateWindow(
       title.c_str(),
       SDL_WINDOWPOS_UNDEFINED,
       SDL_WINDOWPOS_UNDEFINED,
       width, height,
-      SDL_WINDOW_OPENGL|SDL_WINDOW_ALLOW_HIGHDPI);//|SDL_WINDOW_FULLSCREEN_DESKTOP);
+      SDL_WINDOW_OPENGL|SDL_WINDOW_ALLOW_HIGHDPI | SDL_WINDOW_FULLSCREEN_DESKTOP);
 
-  SDL_GL_SetAttribute(SDL_GL_MULTISAMPLEBUFFERS, 1);
-  SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, 4);
   SDL_GL_CreateContext(window);
 
   keystate = SDL_GetKeyboardState(nullptr);
