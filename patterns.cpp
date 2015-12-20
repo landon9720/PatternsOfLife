@@ -386,7 +386,6 @@ public:
 class SpawningBehavior : public Behavior {
 public:
   virtual void behave(Agent &agent, float perceptron_output) {
-    if (agent.score == 0) return;
     int new_index = 0;
     while (new_index < num_agents && !agents[new_index].out) {
       new_index++;
