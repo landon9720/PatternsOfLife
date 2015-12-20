@@ -4,22 +4,24 @@
 
 num_agents       = 100;
 agent_spawn_rate = 0.010; 
-food_spawn_rate  = 0.090;
+food_spawn_rate  = 0.100;
 
-food_value = 10.0;
-max_hp     = 10.0;
-burn_rate  = 0.01;
+food_value = 100.0;
+max_hp     = 100.0;
+burn_rate  = 000.4;
 
-mutate_rate    = 0.01;
-mutate_amount  = 0.10;
-dna_multiplier = 0.90;
+mutate_rate    = 0.10;
+mutate_amount  = 0.01;
+dna_multiplier = 0.50;
 
 rotational_waiting = 1;
-linear_waiting     = 2;
-eating_waiting     = 10;
+linear_waiting     = 1;
+eating_waiting     = 1;
 kill_waiting       = 10;
-spawning_waiting   = 10;
-birth_waiting      = 10;
+spawning_waiting   = 50;
+
+incubation_period  = 10;
+juvenile_period    = 100;
 
 turbo_rate = 300;
 

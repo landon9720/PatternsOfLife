@@ -10,7 +10,8 @@ int linear_waiting = 0;
 int eating_waiting = 0;
 int kill_waiting = 0;
 int spawning_waiting = 0;
-int birth_waiting = 0;
+int incubation_period = 0;
+int juvenile_period = 0;
 float burn_rate = 0.0f;
 float mutate_rate = 0.0f;
 float mutate_amount = 0.0f;
@@ -170,6 +171,7 @@ struct Agent {
   int q, r, orientation;
   int score;
   int waiting;
+  int age;
   
   float memory[MEMORY_SIZE];
   float dna[DNA_SIZE];
@@ -190,6 +192,7 @@ struct Agent {
     this->score = 0;
     this->out = false;
     this->waiting = 0;
+    this->age = 0;
     WorldHex *hex;
     do {
       this->q = Q * fdis(gen);
@@ -210,6 +213,20 @@ struct Agent {
     }
     this->hue = parent->hue;
   }
+  
+  inline bool is_egg() {
+      return this->age < incubation_period;
+  }
+  
+  inline bool is_juvenile() {
+      return (this->age >= incubation_period) 
+              && (this->age - incubation_period) < juvenile_period;
+  }
+  
+  inline bool is_adult() {
+      return ! is_egg() && ! is_juvenile();
+  }
+  
 };
 
 Agent agents[max_agents];
@@ -364,7 +381,6 @@ public:
     if (hex != 0 && hex->agent) {
       Agent *target = hex->agent;
       remove_from_world(*target);
-    //   hex->food |= 2;
       agent.waiting += kill_waiting;
     }
   }
@@ -386,6 +402,9 @@ public:
 class SpawningBehavior : public Behavior {
 public:
   virtual void behave(Agent &agent, float perceptron_output) {
+    if (! agent.is_adult()) {
+        return;
+    }
     int new_index = 0;
     while (new_index < num_agents && !agents[new_index].out) {
       new_index++;
@@ -403,7 +422,6 @@ public:
         agents[new_index].r = new_r;
         agents[new_index].orientation = agent.orientation;
         hex_axial(agents[new_index].q, agents[new_index].r)->agent = &agents[new_index];
-        agents[new_index].waiting += birth_waiting;
         agent.waiting += spawning_waiting;
       }
     }
@@ -442,12 +460,13 @@ void refreshConfig() {
   root.lookupValue("eating_waiting", eating_waiting);
   root.lookupValue("kill_waiting", kill_waiting);
   root.lookupValue("spawning_waiting", spawning_waiting);
-  root.lookupValue("birth_waiting", birth_waiting);
   root.lookupValue("burn_rate", burn_rate);
   root.lookupValue("mutate_rate", mutate_rate);
   root.lookupValue("mutate_amount", mutate_amount);
   root.lookupValue("dna_multiplier", dna_multiplier);
   root.lookupValue("turbo_rate", turbo_rate);
+  root.lookupValue("incubation_period", incubation_period);
+  root.lookupValue("juvenile_period", juvenile_period);
 }
 
 long last_refresh;
@@ -597,13 +616,20 @@ void step() {
 
     Agent &agent = agents[i];
 
+    // out
     if (agent.out) {
       continue;
     }
-
-    // decay health as a function of time
-    agent.health_points -= burn_rate;
     
+    // age
+    agent.age++;
+
+    // health decay
+    if (! agent.is_egg()) {
+        agent.health_points -= burn_rate;
+    }
+    
+    // waiting
     if (agent.waiting > 0) {
       agent.waiting--;
       continue;
@@ -614,6 +640,13 @@ void step() {
       remove_from_world(agent);
       continue;
     }
+    
+    // eggs have no brain
+    if (agent.is_egg()) {
+        continue;
+    }
+    
+    // NN
     
     FoodSensor foodSensor_here(0, 0);
     FoodSensor foodSensor_ahead1(0, 1);
@@ -786,27 +819,34 @@ void step() {
         // pixel location
         int x, y;
         axial_to_xy(agent.q, agent.r, x, y);
-
-        // indicate orientation
+        
         float r, g, b;
         hsv_to_rgb(agent.hue, 1.0f, 1.0f, &r, &g, &b);
-        eg_set_color(r, g, b, 1.0f);
-        float angle = agent.orientation / 6.0f * 2 * M_PI + (M_PI / 6.0f);
-        float orientation_line_length = 25.0;
-        eg_draw_line(x, 
-                     y, 
-                     x + (float)cos(angle) * orientation_line_length,
-                     y + (float)sin(angle) * orientation_line_length,
-                     15.0f);
+
+        // indicate orientation
+        if (!agent.is_egg()) {
+            eg_set_color(r, g, b, 1.0f);
+            float angle = agent.orientation / 6.0f * 2 * M_PI + (M_PI / 6.0f);
+            float orientation_line_length = 25.0;
+            eg_draw_line(x, 
+                         y, 
+                         x + (float)cos(angle) * orientation_line_length,
+                         y + (float)sin(angle) * orientation_line_length,
+                         15.0f);
+        }
 
         // agent
         eg_push_transform();
         eg_translate(x, y);
         eg_rotate((agent.orientation / 6.0f) * 360.0f + (360 / 12));
-        const float AGENT_SIZE = 20.0f;
-        float buddy_size = AGENT_SIZE * 1.0f;
+        float buddy_size = 20.0f;
+        if (!agent.is_adult())
+            buddy_size *= 0.6f;
         eg_scale(buddy_size, buddy_size);
-        eg_set_color(0.9f, 0.9f, 0.9f, 1.0f);
+        if (agent.is_adult())
+            eg_set_color(0.9f, 0.9f, 0.9f, 1.0f);
+        else
+            eg_set_color(r, g, b, 1.0f);
         eg_draw_square(-0.5f, -0.5f, 1.0f, 1.0f);
         eg_scale(0.5f, 0.5f);
         eg_set_color(0.0f, 0.0f, 0.0f, 1.0f);
