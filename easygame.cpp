@@ -20,10 +20,11 @@ void eg_init(int width, int height, const std::string &title) {
   
   window = SDL_CreateWindow(
       title.c_str(),
-      SDL_WINDOWPOS_UNDEFINED,
-      SDL_WINDOWPOS_UNDEFINED,
+      0,
+      0,
       width, height,
-      SDL_WINDOW_OPENGL|SDL_WINDOW_ALLOW_HIGHDPI | SDL_WINDOW_FULLSCREEN_DESKTOP);
+      SDL_WINDOW_OPENGL|SDL_WINDOW_ALLOW_HIGHDPI|SDL_WINDOW_RESIZABLE);
+            // SDL_WINDOW_OPENGL|SDL_WINDOW_ALLOW_HIGHDPI | SDL_WINDOW_FULLSCREEN_DESKTOP);
 
   SDL_GL_CreateContext(window);
 

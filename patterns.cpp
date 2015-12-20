@@ -1,5 +1,18 @@
 #include "patterns.h"
 
+int num_agents = 0;
+float agent_spawn_rate = 0.0f;
+float food_spawn_rate = 0.0f;
+float food_value = 0.0f;
+float max_hp = 0.0f;
+int rotational_waiting = 0;
+int linear_waiting = 0;
+int eating_waiting = 0;
+int kill_waiting = 0;
+int spawning_waiting = 0;
+int birth_waiting = 0;
+int turbo_rate = 0;
+
 struct Agent;
 
 class Sensor {
@@ -36,14 +49,12 @@ static bool zooming = false;
 static float camera_x = HEX_SIZE * R;
 static float camera_y = HEX_SIZE * Q;
 static float camera_zoom = 1.0f;
-static float food_spawn_rate = 0.304482f;
 static int draw_record = 0;
 static int following = -1;
 static int frame = 0;
 static int frame_rate = 1;
 static int moving_home_x;
 static int moving_home_y;
-static int num_agents = 50;
 static int records_index = 0;
 static int zooming_home;
 
@@ -139,12 +150,9 @@ int direction_add(int direction, int rotation) {
 //   return cubic_distance(x0, y0, z0, x1, y1, z1);
 // }
 
-const float FOOD_VALUE = 100.0f;
-const float MAX_HEALTH_POINTS = 1000.0f;
 const int DAY_LENGTH = 2000;
-const int MAX_AGENTS = 1000;
+const int max_agents = 2000;
 const int RECORD_SAMPLE_RATE = 100;
-const int TURBO_RATE = 307;
 
 static std::random_device rd;
 static std::mt19937 gen(rd());
@@ -174,7 +182,7 @@ struct Agent {
   }
 
   void reset_agent() {
-    this->health_points = MAX_HEALTH_POINTS;
+    this->health_points = max_hp;
     this->score = 0;
     this->out = false;
     this->waiting = 0;
@@ -200,7 +208,7 @@ struct Agent {
   }
 };
 
-Agent agents[MAX_AGENTS];
+Agent agents[max_agents];
 
 int select() {
   int total_score = 0;
@@ -235,14 +243,14 @@ void remove_from_world(Agent &agent) {
 }
 
 struct Record {
-  float hues[MAX_AGENTS];
+  float hues[max_agents];
   float dna[DNA_SIZE];
-  int scores[MAX_AGENTS];
-  bool outs[MAX_AGENTS];
+  int scores[max_agents];
+  bool outs[max_agents];
   float selected_hue;
 
   Record() {
-    for (int i = 0; i < MAX_AGENTS; i++)
+    for (int i = 0; i < max_agents; i++)
       outs[i] = true;
   }
 };
@@ -304,7 +312,7 @@ private:
 class SelfHealthPointsSensor : public Sensor {
 public:
   virtual float sense(const Agent &agent) {
-    return (float)agent.health_points / (float)MAX_HEALTH_POINTS;
+    return (float)agent.health_points / (float)max_hp;
   }
 };
 
@@ -313,10 +321,10 @@ public:
   virtual void behave(Agent &agent, float perceptron_output) { 
     if (perceptron_output < 0.5f) {
       agent.orientation = direction_add(agent.orientation, +1);
-      agent.waiting += 1;
+      agent.waiting += rotational_waiting;
     } else if (perceptron_output > 0.5f) {
       agent.orientation = direction_add(agent.orientation, -1);
-      agent.waiting += 1;
+      agent.waiting += rotational_waiting;
     }
   }
 };
@@ -337,7 +345,7 @@ public:
     }
     cubic_to_axial(x, y, z, agent.q, agent.r);
     hex_axial(agent.q, agent.r)->agent = &agent;
-    agent.waiting += 2;
+    agent.waiting += linear_waiting;
   }
 };
 
@@ -352,8 +360,8 @@ public:
     if (hex != 0 && hex->agent) {
       Agent *target = hex->agent;
       remove_from_world(*target);
-      hex->food |= 2;
-      agent.waiting += 40;
+    //   hex->food |= 2;
+      agent.waiting += kill_waiting;
     }
   }
 };
@@ -363,12 +371,12 @@ public:
   virtual void behave(Agent &agent, float perceptron_output) {
     WorldHex *hex = hex_axial(agent.q, agent.r);
     if (hex != 0 && hex->food > 0) {
-      hex->food -= 1;
-      float fv = hex->food == 1 ? FOOD_VALUE : FOOD_VALUE * 2.0f;
-      agent.health_points = min(MAX_HEALTH_POINTS, agent.health_points + fv);
+      hex->food = 0;
+      float fv = hex->food == 1 ? food_value : food_value * 2.0f;
+      agent.health_points = min(max_hp, agent.health_points + fv);
       agent.score++;
     }
-    agent.waiting += 10;
+    agent.waiting += eating_waiting;
   }
 };
 
@@ -393,10 +401,10 @@ public:
         agents[new_index].r = new_r;
         agents[new_index].orientation = agent.orientation;
         hex_axial(agents[new_index].q, agents[new_index].r)->agent = &agents[new_index];
-        agents[new_index].waiting += 200;
+        agents[new_index].waiting += birth_waiting;
       }
     }
-    agent.waiting += 200;
+    agent.waiting += spawning_waiting;
   }
 };
 
@@ -404,6 +412,40 @@ void init() {
   eg_init(WIDTH, HEIGHT, "Patterns of Life");
   setlocale(LC_NUMERIC, "");
 }
+
+Config cfg;
+void refreshConfig() {
+    try {
+        cfg.readFile("config");
+    } catch(const FileIOException &fioex) {
+        printf("I/O error while reading file\n");  
+        return;
+    } catch(const ParseException &pex) {
+        printf("Parse error\n");
+        printf("File: %s\n", pex.getFile());
+        printf("Line: %d\n", pex.getLine());
+        printf("Error: %s\n", pex.getError());
+        return;
+    }
+
+  Setting& root = cfg.getRoot();
+  root.lookupValue("num_agents", num_agents);
+  root.lookupValue("agent_spawn_rate", agent_spawn_rate);
+  num_agents = min(num_agents, max_agents);
+  root.lookupValue("food_spawn_rate", food_spawn_rate);
+  root.lookupValue("food_value", food_value);
+  root.lookupValue("max_hp", max_hp);
+  root.lookupValue("rotational_waiting", rotational_waiting);
+  root.lookupValue("linear_waiting", linear_waiting);
+  root.lookupValue("eating_waiting", eating_waiting);
+  root.lookupValue("kill_waiting", kill_waiting);
+  root.lookupValue("spawning_waiting", spawning_waiting);
+  root.lookupValue("birth_waiting", birth_waiting);
+  root.lookupValue("turbo_rate", turbo_rate);
+}
+
+long last_refresh;
+long last_refresh_interval = 1000000;
 
 void step() {
 
@@ -434,23 +476,23 @@ void step() {
         paused = false;
         break;
       case SDL_SCANCODE_2:
-        frame_rate = int((float)TURBO_RATE * 0.04f);
+        frame_rate = int((float)turbo_rate * 0.04f);
         paused = false;
         break;
       case SDL_SCANCODE_3:
-        frame_rate = int((float)TURBO_RATE * 0.20f);
+        frame_rate = int((float)turbo_rate * 0.20f);
         paused = false;
         break;
       case SDL_SCANCODE_4:
-        frame_rate = TURBO_RATE;
+        frame_rate = turbo_rate;
         paused = false;
         break;
       case SDL_SCANCODE_5:
-        frame_rate = TURBO_RATE * 5.0f;
+        frame_rate = turbo_rate * 5.0f;
         paused = false;
         break;
       case SDL_SCANCODE_6:
-        frame_rate = TURBO_RATE * 5.0f * 5.0f;
+        frame_rate = turbo_rate * 5.0f * 5.0f;
         paused = false;
         break;
       case SDL_SCANCODE_TAB:
@@ -518,7 +560,7 @@ void step() {
           }
           printf("food_spawn_rate=%f\n", food_spawn_rate);
         } else {
-          if (num_agents < MAX_AGENTS) {
+          if (num_agents < max_agents) {
             agents[num_agents].randomize();
             agents[num_agents++].reset_agent();
             printf("num_agents=%d\n", num_agents);
@@ -550,7 +592,13 @@ void step() {
     return;
   nudge = false;
   
-  if (frame % 100 == 0) {
+  long now = system_clock::now().time_since_epoch().count();
+  if (now - last_refresh > last_refresh_interval) {
+    refreshConfig();
+    last_refresh = now;
+  }
+  
+  if (fdis(gen) < agent_spawn_rate) {
     for (int i = 0; i < num_agents; i++) {
       Agent &agent = agents[i];
       if (agent.out) {
@@ -663,7 +711,7 @@ void step() {
     for (int i = 0; i < DNA_SIZE; i++) {
       records[records_index].dna[i] = agents[selected_index].dna[i];
     }
-    for (int i = 0; i < MAX_AGENTS; i++) {
+    for (int i = 0; i < max_agents; i++) {
       const Agent &agent = agents[i];
       records[records_index].scores[i] = agent.score;
       records[records_index].hues[i] = agent.hue;
@@ -794,12 +842,12 @@ void step() {
           // health bar
           eg_set_color(0.2f, 0.2f, 0.2f, 0.7f);
           eg_draw_square(x - 15.0f, y + 12.0f, 30.0f, 5.0f);
-          if (agent.health_points > MAX_HEALTH_POINTS * 0.25f) {
+          if (agent.health_points > max_hp * 0.25f) {
             eg_set_color(0.5f, 0.9f, 0.5f, 0.8f);
           } else {
             eg_set_color(0.8f, 0.3f, 0.3f, 0.8f);
           }
-          eg_draw_square(x - 15.0f, y + 12.0f, agent.health_points * 30.0f / MAX_HEALTH_POINTS, 5.0f);
+          eg_draw_square(x - 15.0f, y + 12.0f, agent.health_points * 30.0f / max_hp, 5.0f);
         }
       }
     }
@@ -829,7 +877,7 @@ void step() {
     if (draw_record % 4 == 2) {
       for (int rx = 0; rx < WIDTH; rx++) {
         const Record &record = records[(records_index + rx) % WIDTH];
-        for (int i = 0; i < MAX_AGENTS; ++i) {
+        for (int i = 0; i < max_agents; ++i) {
           if (!record.outs[i]) {
             float r, g, b;
             hsv_to_rgb(record.hues[i], 1.00f, 1.00f, &r, &g, &b);

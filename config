@@ -1,0 +1,13 @@
+num_agents = 100;
+agent_spawn_rate = 0.1; 
+food_spawn_rate = 0.1; 
+food_value = 100.0;
+max_hp = 550.0;
+rotation_waiting = 0;
+linear_waiting = 0;
+eating_waiting = 0;
+kill_waiting = 0;
+spawning_waiting = 0;
+birth_waiting = 0;
+turbo_rate = 300;
+
