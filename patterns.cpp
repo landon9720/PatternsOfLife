@@ -12,6 +12,9 @@ int kill_waiting = 0;
 int spawning_waiting = 0;
 int birth_waiting = 0;
 float burn_rate = 0.0f;
+float mutate_rate = 0.0f;
+float mutate_amount = 0.0f;
+float dna_multiplier = 0.0f;
 int turbo_rate = 0;
 
 struct Agent;
@@ -32,10 +35,10 @@ struct WorldHex {
 };
 
 const int HEX_SIZE = 50;
-const int WIDTH = 1280;
-const int HEIGHT = 800;
-const int Q = 120;
-const int R = 120;
+const int WIDTH = 1280 * 0.6f;
+const int HEIGHT = 800 * 0.6f;
+const int Q = 20;
+const int R = 20;
 const int WORLD_SIZE = Q * R;
 
 const int DNA_SIZE = 14 * 8 + 8 * 9 + 9;
@@ -177,7 +180,7 @@ struct Agent {
 
   void randomize() {
     for (int i = 0; i < DNA_SIZE; i++) {
-      dna[i] = norm_dist(gen);
+      dna[i] = norm_dist(gen) * dna_multiplier;
     }
     this->hue = fabs((float)((int)(fdis(gen) * 10000.0f) % 10000) / 10000.0f);
   }
@@ -199,8 +202,8 @@ struct Agent {
 
   void init_from_parent(Agent *parent) {
     for (int i = 0; i < DNA_SIZE-1; i++) {
-      if (fdis(gen) < 0.1f) {
-        this->dna[i] = parent->dna[i] + (norm_dist(gen) * 0.2f);  
+      if (fdis(gen) < mutate_rate) {
+        this->dna[i] = parent->dna[i] + (norm_dist(gen) * mutate_amount);  
       } else {
         this->dna[i] = parent->dna[i];
       }
@@ -320,10 +323,10 @@ public:
 class RotationalBehavior : public Behavior {
 public:
   virtual void behave(Agent &agent, float perceptron_output) { 
-    if (perceptron_output < 0.5f) {
+    if (perceptron_output < -0.5f) {
       agent.orientation = direction_add(agent.orientation, +1);
       agent.waiting += rotational_waiting;
-    } else if (perceptron_output > 0.5f) {
+    } else if (perceptron_output > +0.5f) {
       agent.orientation = direction_add(agent.orientation, -1);
       agent.waiting += rotational_waiting;
     }
@@ -343,10 +346,10 @@ public:
       x = x0;
       y = y0;
       z = z0;
+      agent.waiting += linear_waiting;
     }
     cubic_to_axial(x, y, z, agent.q, agent.r);
     hex_axial(agent.q, agent.r)->agent = &agent;
-    agent.waiting += linear_waiting;
   }
 };
 
@@ -373,17 +376,17 @@ public:
     WorldHex *hex = hex_axial(agent.q, agent.r);
     if (hex != 0 && hex->food > 0) {
       hex->food = 0;
-      float fv = hex->food == 1 ? food_value : food_value * 2.0f;
-      agent.health_points = min(max_hp, agent.health_points + fv);
+      agent.health_points = min(max_hp, agent.health_points + food_value);
       agent.score++;
+      agent.waiting += eating_waiting;
     }
-    agent.waiting += eating_waiting;
   }
 };
 
 class SpawningBehavior : public Behavior {
 public:
   virtual void behave(Agent &agent, float perceptron_output) {
+    if (agent.score == 0) return;
     int new_index = 0;
     while (new_index < num_agents && !agents[new_index].out) {
       new_index++;
@@ -391,8 +394,7 @@ public:
     if (new_index < num_agents) {
       int new_q = agent.q;
       int new_r = agent.r;
-      int random_direction = agent.orientation;
-      axial_add_direction(new_q, new_r, random_direction);
+      axial_add_direction(new_q, new_r, agent.orientation);
       WorldHex *hex = hex_axial(new_q, new_r);
       if (hex != 0 && hex->agent == 0) {
         agents[new_index].init_from_parent(&agent);
@@ -403,9 +405,9 @@ public:
         agents[new_index].orientation = agent.orientation;
         hex_axial(agents[new_index].q, agents[new_index].r)->agent = &agents[new_index];
         agents[new_index].waiting += birth_waiting;
+        agent.waiting += spawning_waiting;
       }
     }
-    agent.waiting += spawning_waiting;
   }
 };
 
@@ -443,6 +445,9 @@ void refreshConfig() {
   root.lookupValue("spawning_waiting", spawning_waiting);
   root.lookupValue("birth_waiting", birth_waiting);
   root.lookupValue("burn_rate", burn_rate);
+  root.lookupValue("mutate_rate", mutate_rate);
+  root.lookupValue("mutate_amount", mutate_amount);
+  root.lookupValue("dna_multiplier", dna_multiplier);
   root.lookupValue("turbo_rate", turbo_rate);
 }
 

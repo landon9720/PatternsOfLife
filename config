@@ -1,14 +1,25 @@
-num_agents = 1000;
-agent_spawn_rate = 0.1; 
-food_spawn_rate = 0.1; 
-food_value = 100.0;
-max_hp = 10.0;
-rotational_waiting = 0;
-linear_waiting = 0;
-eating_waiting = 0;
-kill_waiting = 0;
-spawning_waiting = 2;
-birth_waiting = 2;
-burn_rate = 1.0;
+//
+// Patterns of Life
+//
+
+num_agents       = 10;
+agent_spawn_rate = 0.010; 
+food_spawn_rate  = 0.100;
+
+food_value = 10.0;
+max_hp     = 10.0;
+burn_rate  = 0.01;
+
+mutate_rate    = 0.01;
+mutate_amount  = 0.10;
+dna_multiplier = 0.90;
+
+rotational_waiting = 1;
+linear_waiting     = 2;
+eating_waiting     = 10;
+kill_waiting       = 10;
+spawning_waiting   = 100;
+birth_waiting      = 200;
+
 turbo_rate = 100;
 
