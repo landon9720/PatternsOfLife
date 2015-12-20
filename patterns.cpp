@@ -11,6 +11,7 @@ int eating_waiting = 0;
 int kill_waiting = 0;
 int spawning_waiting = 0;
 int birth_waiting = 0;
+float burn_rate = 0.0f;
 int turbo_rate = 0;
 
 struct Agent;
@@ -441,6 +442,7 @@ void refreshConfig() {
   root.lookupValue("kill_waiting", kill_waiting);
   root.lookupValue("spawning_waiting", spawning_waiting);
   root.lookupValue("birth_waiting", birth_waiting);
+  root.lookupValue("burn_rate", burn_rate);
   root.lookupValue("turbo_rate", turbo_rate);
 }
 
@@ -624,7 +626,7 @@ void step() {
     }
 
     // decay health as a function of time
-    agent.health_points += -1.0f;
+    agent.health_points -= burn_rate;
     
     if (agent.waiting > 0) {
       agent.waiting--;
