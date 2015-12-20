@@ -156,7 +156,7 @@ int direction_add(int direction, int rotation) {
 
 const int DAY_LENGTH = 2000;
 const int max_agents = 2000;
-const int RECORD_SAMPLE_RATE = 100;
+const int RECORD_SAMPLE_RATE = 1000;
 
 static std::random_device rd;
 static std::mt19937 gen(rd());
@@ -182,7 +182,7 @@ struct Agent {
     for (int i = 0; i < DNA_SIZE; i++) {
       dna[i] = norm_dist(gen) * dna_multiplier;
     }
-    this->hue = fabs((float)((int)(fdis(gen) * 10000.0f) % 10000) / 10000.0f);
+    this->hue = fabs((float)((int)(fdis(gen) * 100.0f) % 100) / 100.0f);
   }
 
   void reset_agent() {
@@ -545,34 +545,6 @@ void step() {
           zooming = true;
         }
         break;
-      case SDL_SCANCODE_MINUS:
-        if (e.keysym.mod & KMOD_SHIFT) {
-          if (food_spawn_rate > 0.00000001f) {
-            food_spawn_rate /= 1.1f;
-          }
-          printf("food_spawn_rate=%f\n", food_spawn_rate);
-        } else {
-          if (num_agents > 0) {
-            remove_from_world(agents[num_agents - 1]);
-            --num_agents;
-            printf("num_agents=%d\n", num_agents);
-          }
-        }
-        break;
-      case SDL_SCANCODE_EQUALS:
-        if (e.keysym.mod & KMOD_SHIFT) {
-          if (food_spawn_rate < 1.0f) {
-            food_spawn_rate *= 1.1f;
-          }
-          printf("food_spawn_rate=%f\n", food_spawn_rate);
-        } else {
-          if (num_agents < max_agents) {
-            agents[num_agents].randomize();
-            agents[num_agents++].reset_agent();
-            printf("num_agents=%d\n", num_agents);
-          }
-        }
-        break;
       default:
         break;
       }
@@ -728,9 +700,6 @@ void step() {
   }
 
   // display
-  //
-  //
-  //
   if (frame % frame_rate == 0 || moving || zooming) {
 
     eg_clear_screen(0.0f, 0.0f, 0.0f, 0.0f);
