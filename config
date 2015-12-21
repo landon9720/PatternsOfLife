@@ -12,16 +12,16 @@ burn_rate  = 000.4;
 
 mutate_rate    = 0.10;
 mutate_amount  = 0.01;
-dna_multiplier = 0.50;
+dna_multiplier = 0.60;
 
 rotational_waiting = 1;
-linear_waiting     = 1;
-eating_waiting     = 1;
+linear_waiting     = 10;
+eating_waiting     = 10;
 kill_waiting       = 10;
 spawning_waiting   = 50;
 
-incubation_period  = 10;
-juvenile_period    = 100;
+incubation_period  = 100;
+juvenile_period    = 300;
 
 turbo_rate = 300;
 
