@@ -12,6 +12,7 @@ typedef SDL_Event EGEvent;
 
 bool eg_poll_event(EGEvent *ev);
 bool eg_get_keystate(int scancode);
+void warp_mouse(int x, int y);
 
 // graphics
 void eg_swap_buffers();
@@ -33,17 +34,14 @@ EGImage *eg_load_image(const std::string &filename);
 void eg_free_image(EGImage *image);
 void eg_draw_image(EGImage *img, float x, float y, float w, float h);
 
-// audio
-struct EGSound;
-EGSound *eg_load_sound(const std::string &filename);
-void eg_free_sound(EGSound *sound);
-void eg_play_sound(EGSound *sound);
-
 // util
 template<typename T>
 T clamp(const T &x, const T &a, const T &b) {
   return std::max(std::min(x, b), a);
 }
 
-#endif
+float angle_diff(float a, float b);
 
+void hsv_to_rgb(float h, float s, float v, float *r, float *g, float *b);
+
+#endif

@@ -16,15 +16,16 @@ static SDL_Window *window = nullptr;
 static const unsigned char *keystate = nullptr;
 
 void eg_init(int width, int height, const std::string &title) {
-  SDL_Init(SDL_INIT_VIDEO);
+  SDL_Init(SDL_INIT_EVERYTHING);
+  
   window = SDL_CreateWindow(
       title.c_str(),
-      SDL_WINDOWPOS_UNDEFINED,
-      SDL_WINDOWPOS_UNDEFINED,
+      0,
+      0,
       width, height,
-      SDL_WINDOW_OPENGL|SDL_WINDOW_ALLOW_HIGHDPI);
+      SDL_WINDOW_OPENGL|SDL_WINDOW_ALLOW_HIGHDPI|SDL_WINDOW_RESIZABLE);
+            // SDL_WINDOW_OPENGL|SDL_WINDOW_ALLOW_HIGHDPI | SDL_WINDOW_FULLSCREEN_DESKTOP);
 
-  SDL_SetWindowFullscreen(window, 0);
   SDL_GL_CreateContext(window);
 
   keystate = SDL_GetKeyboardState(nullptr);
@@ -33,9 +34,6 @@ void eg_init(int width, int height, const std::string &title) {
   glOrtho(0, width, 0, height, -1, 1);
   glEnable(GL_BLEND);
   glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-
-  Mix_Init(0);
-  Mix_OpenAudio(MIX_DEFAULT_FREQUENCY, MIX_DEFAULT_FORMAT, 2, 1024);
 
   initialized = true;
 }
@@ -54,16 +52,35 @@ bool eg_get_keystate(int scancode) {
   return keystate[scancode];
 }
 
-//void eg_push_transform();
-//void eg_pop_transform();
+void warp_mouse(int x, int y) {
+  SDL_WarpMouseInWindow(window, x, y);
+}
+
+void eg_push_transform() {
+  glMatrixMode(GL_MODELVIEW);
+  glPushMatrix();
+
+}
+
+void eg_pop_transform() {
+  glMatrixMode(GL_MODELVIEW);
+  glPopMatrix();
+}
 
 void eg_reset_transform() {
   glMatrixMode(GL_MODELVIEW);
   glLoadIdentity();
 }
 
-//void eg_rotate(float r);
-//void eg_scale(float x, float y);
+void eg_rotate(float r) {
+  glMatrixMode(GL_MODELVIEW);
+  glRotatef(r, 0, 0, 1);
+}
+
+void eg_scale(float x, float y) {
+  glMatrixMode(GL_MODELVIEW);
+  glScalef(x, y, 1.0f);
+}
 
 void eg_translate(float x, float y) {
   glMatrixMode(GL_MODELVIEW);
@@ -122,7 +139,7 @@ EGImage *eg_load_image(const std::string &filename) {
   glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, surface->w, surface->h, 0, GL_RGBA, GL_UNSIGNED_BYTE, surface->pixels);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-  
+
   SDL_FreeSurface(surface);
 
   EGImage *image = new EGImage { texture };
@@ -149,21 +166,59 @@ void eg_draw_image(EGImage *img, float x, float y, float w, float h) {
   glBindTexture(GL_TEXTURE_2D, 0);
 }
 
-struct EGSound {
-  Mix_Chunk *chunk;
-};
-
-EGSound *eg_load_sound(const std::string &filename) {
-  Mix_Chunk *chunk = Mix_LoadWAV(filename.c_str());
-  assert(chunk != nullptr);
-  return new EGSound { chunk };
+float angle_diff(float a, float b) {
+  if(a > b) {
+    float x = fmod(a - b, 2*M_PI);
+    if(x > M_PI) x -= 2*M_PI;
+    return x;
+  } else {
+    float x = fmod(b - a, 2*M_PI);
+    if(x > M_PI) x -= 2*M_PI;
+    return -x;
+  }
 }
 
-void eg_free_sound(EGSound *sound) {
-  Mix_FreeChunk(sound->chunk);
-  delete sound;
-}
 
-void eg_play_sound(EGSound *sound) {
-  Mix_PlayChannel(-1, sound->chunk, 0);
+// from http://martin.ankerl.com/2009/12/09/how-to-create-random-colors-programmatically/
+void hsv_to_rgb(float h, float s, float v, float *r, float *g, float *b) {
+  assert(h >= 0.0f && h <= 1.0f);
+  assert(s >= 0.0f && s <= 1.0f);
+  assert(v >= 0.0f && v <= 1.0f);
+  int h_i = h * 6;
+  float f = h * 6 - h_i;
+  float p = v * (1 - s);
+  float q = v * (1 - f * s);
+  float t = v * (1 - (1 - f) * s);
+  switch (h_i) {
+    case 0:
+      *r = v;
+      *g = t;
+      *b = p;
+    break;
+    case 1:
+      *r = q;
+      *g = v;
+      *b = p;
+    break;
+    case 2:
+      *r = p;
+      *g = v;
+      *b = t;
+    break;
+    case 3:
+      *r = p;
+      *g = q;
+      *b = v;
+    break;
+    case 4:
+      *r = t;
+      *g = p;
+      *b = v;
+    break;
+    case 5:
+      *r = v;
+      *g = p;
+      *b = q;
+    break;
+  }
 }
